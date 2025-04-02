@@ -14,7 +14,8 @@ from openpi_client import websocket_client_policy as _websocket_client_policy
 import tqdm
 import tyro
 
-import openpi.models.noise_model as noise_model
+# import openpi.models.noise_model as noise_model
+from openpi.models.noise_model import sample_noise
 
 LIBERO_DUMMY_ACTION = [0.0] * 6 + [-1.0]
 LIBERO_ENV_RESOLUTION = 256  # resolution used to render training data
@@ -35,8 +36,8 @@ class Args:
     # LIBERO environment-specific parameters
     #################################################################################################################
     task_suite_name: str = (
-        # "libero_spatial"  # Task suite. Options: libero_spatial, libero_object, libero_goal, libero_10, libero_90
-        "libero_10"  # Highly difficult tasks
+        "libero_spatial"  # Task suite. Options: libero_spatial, libero_object, libero_goal, libero_10, libero_90
+        # "libero_10"  # Highly difficult tasks
     )
     num_steps_wait: int = 10  # Number of steps to wait for objects to stabilize i n sim
     num_trials_per_task: int = 50  # Number of rollouts per task
@@ -49,6 +50,15 @@ class Args:
     img_out_path: str = "data/libero/images"  # Path to save images
 
     seed: int = 7  # Random Seed (for reproducibility)
+
+    noise_type: str = "all"  # Noise type to insert. Options: xyz, wrist, gripper, all
+
+    noise_insert_step: int = 75  # Step to insert noise
+
+    noise_last_step: int = 10  # Steps to keep noise
+
+    noise_scale: float = 0.3  # Scale of noise
+
 
 # Global variables
 success_rate_list_per_task: list = []  # List to store success rates of each task
@@ -157,14 +167,15 @@ def eval_libero(args: Args) -> None:
                         action_plan.extend(action_chunk[: args.replan_steps])
 
                     action = action_plan.popleft()
-                    # print(f"Action: {action}")
-                    
 
-                    if t == noise_model.NOISE_MODEL_STEP:
-
+                    disturbed_action = action.copy()
 
                     # Execute action in environment
-                    obs, reward, done, info = env.step(action.tolist())
+                    disturbed_action = sample_noise(t, args.noise_insert_step, args.noise_last_step, 
+                                                    action, args.noise_type, args.noise_scale)
+
+                    # Execute action in environment
+                    obs, reward, done, info = env.step(disturbed_action.tolist())
                     if done:
                         task_successes += 1
                         total_successes += 1
