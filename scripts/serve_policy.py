@@ -71,7 +71,8 @@ DEFAULT_CHECKPOINT: dict[EnvMode, Checkpoint] = {
     ),
     EnvMode.LIBERO: Checkpoint(
         config="pi0_fast_libero",
-        dir = "/workspace/openpi-JL/checkpoints/pi0_fast_libero/assets",
+        dir = "/workspace/openpi-JL/checkpoints/pi0_fast_libero",
+        # uncomment this line to reload the checkpoint from s3
         # dir="s3://openpi-assets/checkpoints/pi0_fast_libero",
     ),
 }
