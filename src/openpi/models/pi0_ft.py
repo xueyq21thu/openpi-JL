@@ -115,29 +115,38 @@ class Pi0Config(_model.BaseModelConfig):
         has_lora = False
         gemma_params_filter = nnx_utils.PathRegex(".*llm.*")
         action_expert_params_filter = nnx_utils.PathRegex(".*llm.*_1.*")
-        if "lora" in self.paligemma_variant:
-            filters.append(
-                gemma_params_filter,
-            )
-            if "lora" not in self.action_expert_variant:
-                # If only freeze gemma params, exclude action expert params.
-                filters.append(
-                    nnx.Not(action_expert_params_filter),
-                )
-            has_lora = True
-        elif "lora" in self.action_expert_variant:
-            filters.append(
-                action_expert_params_filter,
-            )
-            has_lora = True
 
-        if has_lora:
-            # If any lora is used, exclude all lora params.
-            filters.append(
-                nnx.Not(nnx_utils.PathRegex(".*lora.*")),
+
+        filters.append(
+                nnx.Not(nnx_utils.PathRegex("learnable_vector.*")),
             )
-        if not filters:
-            return nnx.Nothing
+        # filters.append(
+        #         gemma_params_filter,
+        #     )
+        # if "lora" in self.paligemma_variant:
+        #     filters.append(
+        #         gemma_params_filter,
+        #     )
+        #     if "lora" not in self.action_expert_variant:
+        #         # If only freeze gemma params, exclude action expert params.
+        #         filters.append(
+        #             nnx.Not(action_expert_params_filter),
+        #         )
+        #     has_lora = True
+        # elif "lora" in self.action_expert_variant:
+        #     filters.append(
+        #         action_expert_params_filter,
+        #     )
+        #     has_lora = True
+
+        # if has_lora:
+        #     # If any lora is used, exclude all lora params.
+        #     filters.append(
+        #         nnx.Not(nnx_utils.PathRegex(".*lora.*")),
+        #     )
+        # if not filters:
+        #     return nnx.Nothing
+
         return nnx.All(*filters)
 
 
@@ -171,6 +180,13 @@ class Pi0(_model.BaseModel):
         self.action_time_mlp_out = nnx.Linear(action_expert_config.width, action_expert_config.width, rngs=rngs)
         self.action_out_proj = nnx.Linear(action_expert_config.width, config.action_dim, rngs=rngs)
 
+        key = jax.random.PRNGKey(42)  # Replace 42 with your own seed
+
+        # Define a learnable vector of size `d`
+        d = 48
+        # self.learnable_vector = nnx.Param(jax.random.normal(key, (d,2048)))
+        self.learnable_vector = nnx.Param(jnp.zeros((d, 2048)))
+
     @at.typecheck
     def embed_prefix(
         self, obs: _model.Observation
@@ -181,6 +197,8 @@ class Pi0(_model.BaseModel):
         # embed images
         for name in obs.images:
             image_tokens, _ = self.PaliGemma.img(obs.images[name], train=False)
+
+
 
             tokens.append(image_tokens)
             input_mask.append(
@@ -195,9 +213,28 @@ class Pi0(_model.BaseModel):
 
         # add language (aka tokenized inputs)
         if obs.tokenized_prompt is not None:
+            
             tokenized_inputs = self.PaliGemma.llm(obs.tokenized_prompt, method="embed")
+            learnable_vector = self.learnable_vector
+
+            expanded_vector = jnp.tile(learnable_vector[None, :, :], (tokenized_inputs.shape[0], 1, 1))
+
+            # Concatenate along the sequence dimension (axis=1)
+            # tokenized_inputs = expanded_vector
+            tokenized_inputs = expanded_vector + tokenized_inputs
+
+            # tokenized_inputs = jnp.concatenate([expanded_vector, tokenized_inputs], axis=1)
+            # print(concatenated_inputs.shape)  # Should print (32, 52, 2048)
+            # exit()
+            # jax.debug.print("obs.state: {}", obs.tokenized_prompt[0])
+            # jax.debug.print("obs.state: {}", tokenized_inputs[0,:,:5])
+            # exit()
             tokens.append(tokenized_inputs)
-            input_mask.append(obs.tokenized_prompt_mask)
+            # input_mask.append(obs.tokenized_prompt_mask)
+            # extend True by 4 to match the learnable vector
+            input_mask.append(jnp.concatenate([jnp.ones((obs.tokenized_prompt.shape[0], 4), dtype=jnp.bool_), obs.tokenized_prompt_mask[:,:44]], axis=1))
+            # jax.debug.print("obs.state: {}", obs.tokenized_prompt_mask[0])
+            # exit()
             # full attention between image and language inputs
             ar_mask += [False] * tokenized_inputs.shape[1]
         tokens = jnp.concatenate(tokens, axis=1)
