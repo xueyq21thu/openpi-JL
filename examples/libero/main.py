@@ -14,6 +14,8 @@ from openpi_client import websocket_client_policy as _websocket_client_policy
 import tqdm
 import tyro
 
+import openpi.models.noise_model as noise_model
+
 LIBERO_DUMMY_ACTION = [0.0] * 6 + [-1.0]
 LIBERO_ENV_RESOLUTION = 256  # resolution used to render training data
 
@@ -49,29 +51,7 @@ class Args:
     seed: int = 7  # Random Seed (for reproducibility)
 
 # Global variables
-success_rate_list: list = []  # List to store success rates of each episode
 success_rate_list_per_task: list = []  # List to store success rates of each task
-
-# def plot_test(args: Args) -> None:
-#     # init path
-#     pathlib.Path(args.img_out_path).mkdir(parents=True, exist_ok=True)
-#     # Example data
-#     success_rate_list = [0.1, 0.2, 0.3, 0.4, 0.5]
-#     success_rate_list_per_task = [0.6, 0.7, 0.8, 0.9, 1.0]
-
-#     # Plot success rate per task
-#     plt.plot(success_rate_list_per_task)
-#     plt.xlabel("Task ID")
-#     plt.ylabel("Success Rate")
-#     plt.title("Success Rate per Task")
-#     plt.savefig(pathlib.Path(args.img_out_path) / "success_rate_per_task.png")
-
-#     # Plot success rate over time
-#     plt.plot(success_rate_list)
-#     plt.xlabel("Episode")
-#     plt.ylabel("Success Rate")
-#     plt.title("Success Rate over Time")
-#     plt.savefig(pathlib.Path(args.img_out_path) / "success_rate_over_time.png")
 
 def eval_libero(args: Args) -> None:
     # Set random seed
@@ -177,6 +157,11 @@ def eval_libero(args: Args) -> None:
                         action_plan.extend(action_chunk[: args.replan_steps])
 
                     action = action_plan.popleft()
+                    # print(f"Action: {action}")
+                    
+
+                    if t == noise_model.NOISE_MODEL_STEP:
+
 
                     # Execute action in environment
                     obs, reward, done, info = env.step(action.tolist())
@@ -207,17 +192,12 @@ def eval_libero(args: Args) -> None:
             logging.info(f"# episodes completed so far: {total_episodes}")
             logging.info(f"# successes: {total_successes} ({total_successes / total_episodes * 100:.1f}%)")
 
-            # stack success rates
-            success_rate_list.append(task_successes / task_episodes)
-            logging.info(f"Success rate so far: {success_rate_list}")
-
         # Log final results
         logging.info(f"Current task success rate: {float(task_successes) / float(task_episodes)}")
         logging.info(f"Current total success rate: {float(total_successes) / float(total_episodes)}")
 
         # Stack success rates for each task
         success_rate_list_per_task.append(task_successes / task_episodes)
-        logging.info(f"Success rate so far: {success_rate_list}")
         logging.info(f"Success rate for task {task_id}: {task_successes / task_episodes}")
 
     logging.info(f"Total success rate: {float(total_successes) / float(total_episodes)}")
@@ -229,14 +209,6 @@ def eval_libero(args: Args) -> None:
     plt.ylabel("Success Rate")
     plt.title("Success Rate per Task")
     plt.savefig(pathlib.Path(args.img_out_path) / "success_rate_per_task.png")
-
-    # Plot success rate over time
-    plt.plot(success_rate_list)
-    plt.xlabel("Episode")
-    plt.ylabel("Success Rate")
-    plt.title("Success Rate over Time")
-    plt.savefig(pathlib.Path(args.img_out_path) / "success_rate_over_time.png")
-
 
 def _get_libero_env(task, resolution, seed):
     """Initializes and returns the LIBERO environment, along with the task description."""
