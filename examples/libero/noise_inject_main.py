@@ -17,9 +17,14 @@ import tyro
 # data collection
 import os
 import rlds
+from rlds import rlds_types
+from rlds.tfds import episode_writer
+
 import tensorflow as tf
 import tensorflow_datasets as tfds
 from tensorflow.io import TFRecordWriter
+
+
 
 # import openpi.models.noise_model as noise_model
 from openpi.models.noise_model import sample_noise
@@ -149,9 +154,14 @@ def eval_libero(args: Args):
     client = _websocket_client_policy.WebsocketClientPolicy(args.host, args.port)
 
     # Initialize data writer
-    data_path = pathlib.Path(args.data_out_path) / f"{args.task_suite_name}_no_noops"/ "libero_spatial_no_noops.tfrecord"
-    data_path.parent.mkdir(parents=True, exist_ok=True)
+    data_path = pathlib.Path(args.data_out_path) / f"{args.task_suite_name}_no_noops"
+    data_path.mkdir(parents=True, exist_ok=True)
     all_episode = []
+
+    config = episode_writer.DatasetConfig(
+    name="libero_spatial_no_noops",
+    )
+
 
 
     total_episodes, total_successes = 0, 0
@@ -169,7 +179,14 @@ def eval_libero(args: Args):
         task_episodes, task_successes = 0, 0
 
         # # Init Episode
-        # ep = data_writer.write_episode()
+        # ep = episode_writer.write_episode()
+
+        writer = episode_writer.EpisodeWriter(
+            data_directory=str(data_path),
+            ds_config=config,
+            max_episodes_per_file=500,
+            overwrite=True,
+        )
 
         for episode_idx in tqdm.tqdm(range(args.num_trials_per_task)):
             logging.info(f"\nTask: {task_description}")
@@ -184,7 +201,7 @@ def eval_libero(args: Args):
             action_plan = collections.deque()
 
             # Init step
-            step = 0
+            episode = 0
 
             replay_images_agent = []  # List to store images for replay video
             replay_images_wrist = []  # List to store images for replay video
@@ -192,15 +209,15 @@ def eval_libero(args: Args):
             step_data = []  # List to store data for RLDS episode
 
             logging.info(f"Starting episode {task_episodes+1}...")
-            while step < max_num_steps + num_steps_wait:
+            while episode < max_num_steps + num_steps_wait:
                 try:
                     
-                    if step < num_steps_wait:
+                    if episode < num_steps_wait:
                         # IMPORTANT: Do nothing for the first few timesteps because the simulator drops objects
                         # and we need to wait for them to fall
 
                         obs, reward, done, info = env.step(LIBERO_DUMMY_ACTION) # Dummy action to wait for objects to stabilize
-                        step += 1
+                        episode += 1
                         continue
 
                     # Get preprocessed image
@@ -265,9 +282,9 @@ def eval_libero(args: Args):
                     # Write RLDS step
                     step_data.append(
                         {
-                            "observation/image": img,
-                            "observation/wrist_image": wrist_img,
-                            "observation/state": np.concatenate(
+                            "image": img,
+                            "wrist_image": wrist_img,
+                            "state": np.concatenate(
                                 (
                                     obs["robot0_eef_pos"],
                                     quat2axisangle(obs["robot0_eef_quat"]),
@@ -275,9 +292,6 @@ def eval_libero(args: Args):
                                 )
                             ),
                             "action": disturbed_action,
-                            "reward": reward,
-                            "done": done,
-                            "info": info,
                             "language_instruction": str(task_description),
                       }
                     )
@@ -286,7 +300,7 @@ def eval_libero(args: Args):
                         task_successes += 1
                         total_successes += 1
                         break
-                    step += 1
+                    episode += 1
 
                 except Exception as e:
                     logging.error(f"Error during evaluation: {e}")
@@ -310,12 +324,17 @@ def eval_libero(args: Args):
                 )
                 logging.info(f"Saved video to {video_path}")
 
+                # # Save RLDS data
+                # episode = {
+                #     "steps": step_data,  # step_data is a list of dictionaries
+                #     "language_instruction": str(task_description),
+                # }
+                # all_episode.append(episode)
+
                 # Save RLDS data
-                episode = {
-                    "steps": step_data,  # step_data is a list of dictionaries
-                    "language_instruction": str(task_description),
-                }
-                all_episode.append(episode)
+                for episode in step_data:
+                    # write each episode as a separate record
+                    writer.add_episode(episode)
 
             # Log current results
             logging.info(f"Success: {done}")
@@ -341,14 +360,14 @@ def eval_libero(args: Args):
     plt.title("Success Rate per Task")
     plt.savefig(pathlib.Path(args.img_out_path) / "success_rate_per_task.png")
 
-    # Save all episodes to TFRecord
-    logging.info(f"Saving all episodes to {data_path}")
-    data_path = str(data_path)
-    with TFRecordWriter(data_path) as writer:
-        for episode in all_episode:
-            # Write each episode as a separate record
-            writer.write(episode)
-    logging.info(f"Saved all episodes to {data_path}")
+    # # Save all episodes to TFRecord
+    # logging.info(f"Saving all episodes to {data_path}")
+    # data_path = str(data_path)
+    # with TFRecordWriter(data_path) as writer:
+    #     for episode in all_episode:
+    #         # Write each episode as a separate record
+    #         writer.write(episode)
+    # logging.info(f"Saved all episodes to {data_path}")
 
 
 if __name__ == "__main__":
