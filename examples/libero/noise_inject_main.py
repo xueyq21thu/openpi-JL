@@ -15,11 +15,11 @@ import tqdm
 import tyro
 
 # data collection
+import os
 import rlds
-from rlds import writer
 import tensorflow as tf
-import numpy as np
-import pathlib
+import tensorflow_datasets as tfds
+from tensorflow.io import TFRecordWriter
 
 # import openpi.models.noise_model as noise_model
 from openpi.models.noise_model import sample_noise
@@ -48,7 +48,7 @@ class Args:
         # libero_spatial task suite with noise injection and replanning
     )
     num_steps_wait: int = 10  # Number of steps to wait for objects to stabilize i n sim
-    num_trials_per_task: int = 50  # Number of rollouts per task
+    num_trials_per_task: int = 1  # Number of rollouts per task
 
     #################################################################################################################
     # Utils
@@ -57,7 +57,7 @@ class Args:
 
     img_out_path: str = "data/libero/images"  # Path to save images
 
-    data_out_path: str = "data/libero/rlds"  # Path to save data
+    data_out_path: str = "data/libero/rlds/libero_spatial_no_noops"  # Path to save data
 
     seed: int = 7  # Random Seed (for reproducibility)
 
@@ -125,7 +125,6 @@ def eval_libero(args: Args):
     """
     # Set up logging
     logging.basicConfig(level=logging.INFO)
-    logger = logging.getLogger(__name__)
 
     # Set random seed for reproducibility
     np.random.seed(args.seed)
@@ -150,9 +149,10 @@ def eval_libero(args: Args):
     client = _websocket_client_policy.WebsocketClientPolicy(args.host, args.port)
 
     # Initialize data writer
-    data_writer = writer.Writer(
-        pathlib.Path(args.data_out_path) / f"libero_data_{args.task_suite_name}.tfrecord"
-    )
+    data_path = pathlib.Path(args.data_out_path) / f"{args.task_suite_name}_no_noops"/ "libero_spatial_no_noops.tfrecord"
+    data_path.parent.mkdir(parents=True, exist_ok=True)
+    all_episode = []
+
 
     total_episodes, total_successes = 0, 0
     for task_id in tqdm.tqdm(range(num_tasks_in_suite)):
@@ -248,15 +248,15 @@ def eval_libero(args: Args):
 
                     disturbed_action = action.copy()
 
-                    # Execute action in environment
-                    disturbed_action = sample_noise(
-                        step,
-                        args.noise_insert_step,
-                        args.noise_last_step,
-                        action,
-                        args.noise_type,
-                        args.noise_scale,
-                    )
+                    # # Execute action in environment
+                    # disturbed_action = sample_noise(
+                    #     step,
+                    #     args.noise_insert_step,
+                    #     args.noise_last_step,
+                    #     action,
+                    #     args.noise_type,
+                    #     args.noise_scale,
+                    # )
                     
                     # Execute action in environment
                     obs, reward, done, info = env.step(disturbed_action.tolist())
@@ -293,7 +293,6 @@ def eval_libero(args: Args):
                     break
 
             # Finalize and close RLDS episode
-            ep.end_of_episode()
 
             task_episodes += 1
             total_episodes += 1
@@ -303,6 +302,7 @@ def eval_libero(args: Args):
                 # Save video of the episode
                 task_segment = task_description.replace(" ", "_")
                 video_path = pathlib.Path(args.video_out_path)/ f"0{task_id}_{task_segment}" / f"Episode_{task_episodes}.mp4"
+                video_path.parent.mkdir(parents=True, exist_ok=True)
                 imageio.mimwrite(
                     video_path,
                     [np.asarray(x) for x in replay_images_agent],
@@ -310,11 +310,12 @@ def eval_libero(args: Args):
                 )
                 logging.info(f"Saved video to {video_path}")
 
-                # save the data to TFRecord
-                ep = data_writer.write_episode()
-                for step_record in step_data:
-                    ep.write_step(step_record)
-                ep.end_of_episode()
+                # Save RLDS data
+                episode = {
+                    "steps": step_data,  # step_data is a list of dictionaries
+                    "language_instruction": str(task_description),
+                }
+                all_episode.append(episode)
 
             # Log current results
             logging.info(f"Success: {done}")
@@ -329,6 +330,7 @@ def eval_libero(args: Args):
         success_rate_list_per_task.append(task_successes / task_episodes)
         logging.info(f"Success rate for task {task_id}: {task_successes / task_episodes}")
 
+    # log final results
     logging.info(f"Total success rate: {float(total_successes) / float(total_episodes)}")
     logging.info(f"Total episodes: {total_episodes}")
 
@@ -338,6 +340,15 @@ def eval_libero(args: Args):
     plt.ylabel("Success Rate")
     plt.title("Success Rate per Task")
     plt.savefig(pathlib.Path(args.img_out_path) / "success_rate_per_task.png")
+
+    # Save all episodes to TFRecord
+    logging.info(f"Saving all episodes to {data_path}")
+    data_path = str(data_path)
+    with TFRecordWriter(data_path) as writer:
+        for episode in all_episode:
+            # Write each episode as a separate record
+            writer.write(episode)
+    logging.info(f"Saved all episodes to {data_path}")
 
 
 if __name__ == "__main__":

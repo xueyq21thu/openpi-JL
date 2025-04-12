@@ -25,13 +25,13 @@ from lerobot.common.datasets.lerobot_dataset import LeRobotDataset
 import tensorflow_datasets as tfds
 import tyro
 
-REPO_NAME = "your_hf_username/libero"  # Name of the output dataset, also used for the Hugging Face Hub
+REPO_NAME = "data/lerobot"  # Name of the output dataset, also used for the Hugging Face Hub
 RAW_DATASET_NAMES = [
     "libero_spatial_no_noops",
 ]  # This task suite is used for the first stage of the training pipeline
 
 
-def main(data_dir: str, *, push_to_hub: bool = False):
+def main(data_dir: str = "/workspace/openpi-JL/data/libero/rlds", *, push_to_hub: bool = False):
     # Clean up any existing dataset in the output directory
     output_path = LEROBOT_HOME / REPO_NAME
     if output_path.exists():

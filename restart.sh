@@ -15,8 +15,7 @@ GIT_LFS_SKIP_SMUDGE=1 uv pip install -e .
 
 # Install additional dependencies for Fine Tuning
 uv pip install imageio
-uv pip install tensorflow
-uv pip install tensorflow_datasets
+uv pip install tensorflow tensorflow_datasets
 sh dataset.sh
 
 # Install libero dependencies
