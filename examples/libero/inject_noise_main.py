@@ -301,7 +301,7 @@ def eval_libero(args: Args):
             if done:
                 # Save video of the episode
                 task_segment = task_description.replace(" ", "_")
-                video_path = pathlib.Path(args.video_out_path)/ task_segment / f"Episode_{task_episodes}.mp4"
+                video_path = pathlib.Path(args.video_out_path)/ f"0{task_id}_{task_segment}" / f"Episode_{task_episodes}.mp4"
                 imageio.mimwrite(
                     video_path,
                     [np.asarray(x) for x in replay_images_agent],
