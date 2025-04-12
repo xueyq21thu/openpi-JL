@@ -1,0 +1,56 @@
+{// TODO: modify this config to my own finetune config
+    // 训练任务唯一标识符，用于生成checkpoint、asset目录等
+    "name": "lerobot_pi0_finetune",
+  
+    // wandb 项目名，可忽略
+    "project_name": "openpi",
+  
+    // 实验名称（用于输出目录）
+    "exp_name": "pi0_lerobot_aug",
+  
+    // 模型配置（Pi0 是默认的）
+    "model": {
+      "_target_": "openpi.models.pi0.Pi0Config"
+    },
+  
+    // 权重加载器：从已有模型加载
+    "weight_loader": {
+      "_target_": "openpi.training.weight_loaders.PathLoader",
+      "path": "./checkpoints/pi0_base/checkpoint_29000.pkl"  // 👈 你的预训练模型路径
+    },
+  
+    // 数据配置：你自定义的LerobotDataConfig
+    "data": {
+      "_target_": "openpi.data.datasets.lerobot_config.LerobotDataConfig",
+      "data_dir": "./data/lerobot_augmented"  // 👈 你转好的数据路径
+    },
+  
+    // 训练超参数
+    "batch_size": 32,
+    "num_workers": 2,
+    "num_train_steps": 10000,
+    "ema_decay": 0.99,
+    "seed": 0,
+  
+    // 日志与保存频率
+    "log_interval": 100,
+    "save_interval": 1000,
+    "keep_period": 5000,
+  
+    // 如果已有相同checkpoint目录，是否覆盖
+    "overwrite": true,
+    // 是否从上一次训练断点恢复
+    "resume": false,
+  
+    // 是否启用wandb
+    "wandb_enabled": false,
+  
+    // 参数冻结策略：不冻结（即全部finetune）
+    "freeze_filter": {
+      "_target_": "nnx.Nothing"
+    },
+  
+    // FSDP设备数量（1代表不启用FSDP）
+    "fsdp_devices": 1
+  }
+  

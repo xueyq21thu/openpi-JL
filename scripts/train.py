@@ -26,6 +26,7 @@ import openpi.training.sharding as sharding
 import openpi.training.utils as training_utils
 import openpi.training.weight_loaders as _weight_loaders
 
+import json
 
 def init_logging():
     """Custom logging format for better readability."""
@@ -191,6 +192,8 @@ def train_step(
 
 
 def main(config: _config.TrainConfig):
+# def main(config: str = "configs/pi0_noise_finetune.json"):
+    """Main function to train the model."""
     init_logging()
     logging.info(f"Running on: {platform.node()}")
 

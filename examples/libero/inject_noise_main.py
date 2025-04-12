@@ -276,9 +276,10 @@ def eval_libero(args: Args):
                             ),
                             "action": disturbed_action,
                             "reward": reward,
-                            "is_terminal": done,
-                            "prompt": str(task_description),
-                        }
+                            "done": done,
+                            "info": info,
+                            "language_instruction": str(task_description),
+                      }
                     )
 
                     if done:
