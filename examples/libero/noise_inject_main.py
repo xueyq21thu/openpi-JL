@@ -15,11 +15,10 @@ import tqdm
 import tyro
 
 # data collection
-import os
-import rlds
-import tensorflow as tf
-import tensorflow_datasets as tfds
-from tensorflow.io import TFRecordWriter
+import tempfile
+from envlogger import writer
+from envlogger.backends import tfds_backend
+import rlds  # rlds is a library for RL data storage
 
 # import openpi.models.noise_model as noise_model
 from openpi.models.noise_model import sample_noise
@@ -168,8 +167,17 @@ def eval_libero(args: Args):
         # Start Episode
         task_episodes, task_successes = 0, 0
 
-        # # Init Episode
-        # ep = data_writer.write_episode()
+        # init RLDS writer
+        rlds_dir = pathlib.Path(args.data_out_path) / f"Task_{task_id}"
+        rlds_dir.mkdir(parents=True, exist_ok=True)
+
+        # Initialize RLDS writer
+        rlds_writer = writer.Writer(
+            logdir=str(rlds_dir),
+            step_key=rlds.STEP,
+            metadata={"task_description": str(task_description)},
+            backend=tfds_backend.TFDSBackend(),
+        )
 
         for episode_idx in tqdm.tqdm(range(args.num_trials_per_task)):
             logging.info(f"\nTask: {task_description}")
@@ -263,24 +271,16 @@ def eval_libero(args: Args):
 
                     # TODO: add noise injection flag to the record
                     # Write RLDS step
-                    step_data.append(
-                        {
-                            "observation/image": img,
-                            "observation/wrist_image": wrist_img,
-                            "observation/state": np.concatenate(
-                                (
-                                    obs["robot0_eef_pos"],
-                                    quat2axisangle(obs["robot0_eef_quat"]),
-                                    obs["robot0_gripper_qpos"],
-                                )
-                            ),
-                            "action": disturbed_action,
-                            "reward": reward,
-                            "done": done,
-                            "info": info,
-                            "language_instruction": str(task_description),
-                      }
-                    )
+                    episode_step = {
+                        rlds.OBSERVATION: obs,
+                        rlds.ACTION: disturbed_action.tolist(),
+                        rlds.REWARD: reward,
+                        rlds.IS_TERMINAL: done,
+                        rlds.IS_FIRST: (step == args.num_steps_wait),
+                        rlds.IS_LAST: done,
+                    }
+
+                    step_data.append(episode_step)
 
                     if done:
                         task_successes += 1
@@ -311,11 +311,9 @@ def eval_libero(args: Args):
                 logging.info(f"Saved video to {video_path}")
 
                 # Save RLDS data
-                episode = {
-                    "steps": step_data,  # step_data is a list of dictionaries
-                    "language_instruction": str(task_description),
-                }
-                all_episode.append(episode)
+                for step in step_data:
+                    rlds_writer.append(step)
+                rlds_writer.end_episode()
 
             # Log current results
             logging.info(f"Success: {done}")
@@ -343,12 +341,7 @@ def eval_libero(args: Args):
 
     # Save all episodes to TFRecord
     logging.info(f"Saving all episodes to {data_path}")
-    data_path = str(data_path)
-    with TFRecordWriter(data_path) as writer:
-        for episode in all_episode:
-            # Write each episode as a separate record
-            writer.write(episode)
-    logging.info(f"Saved all episodes to {data_path}")
+    rlds_writer.close()
 
 
 if __name__ == "__main__":
