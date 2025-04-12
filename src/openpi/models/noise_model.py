@@ -56,3 +56,33 @@ def sample_noise(
             action_copy += noise
     
     return action_copy
+
+
+def noise_injection(obs, action, noise_level=0.1):
+    """
+    Inject noise into the action vector.
+    :param obs: Observation dictionary containing the current state of the environment.
+    :param action: Action vector to inject noise into.
+    :param noise_level: Scale of noise to inject.
+    :return: Action vector with injected noise.
+    """
+    if obs is None or action is None:
+        return None
+    
+    # TODO: Check che proper condition for noise injection
+    if obs["robot0_gripper_qpos"] < -0.2:
+        pass
+    # Inject noise into the action vector
+    noisy_action = action.copy()
+    noisy_action[0:3] += np.random.normal(0, noise_level, 3)  # Add noise to x, y, z positions
+    noisy_action[3:6] += np.random.normal(0, noise_level, 3)  # Add noise to wrist angles
+    if action[6] < -0.2:
+        noisy_action[6] = 1.0  # Open gripper
+    return np.clip(noisy_action, -1.0, 1.0)  # Clip gripper action to [-1, 1]
+
+
+def compute_reward(obs, goal):
+    #TODO: Implement reward function based on the task
+    # This reward is used to evaluate the performance of the agent in the environment
+    # For now, we just return a dummy reward of 0.0
+    return 0.0

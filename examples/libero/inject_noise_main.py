@@ -14,6 +14,13 @@ from openpi_client import websocket_client_policy as _websocket_client_policy
 import tqdm
 import tyro
 
+# data collection
+import rlds
+from rlds import writer
+import tensorflow as tf
+import numpy as np
+import pathlib
+
 # import openpi.models.noise_model as noise_model
 from openpi.models.noise_model import sample_noise
 
@@ -50,6 +57,8 @@ class Args:
 
     img_out_path: str = "data/libero/images"  # Path to save images
 
+    data_out_path: str = "data/libero/rlds"  # Path to save data
+
     seed: int = 7  # Random Seed (for reproducibility)
 
     noise_type: str = "all"  # Noise type to insert. Options: xyz, wrist, gripper, all
@@ -80,36 +89,6 @@ def quat2axisangle(quat):
         return np.zeros(3)
 
     return (quat[:3] * 2.0 * math.acos(quat[3])) / den
-
-
-def noise_injection(obs, action, noise_level=0.1):
-    """
-    Inject noise into the action vector.
-    :param obs: Observation dictionary containing the current state of the environment.
-    :param action: Action vector to inject noise into.
-    :param noise_level: Scale of noise to inject.
-    :return: Action vector with injected noise.
-    """
-    if obs is None or action is None:
-        return None
-    
-    # TODO: Check che proper condition for noise injection
-    if obs["robot0_gripper_qpos"] < -0.2:
-        pass
-    # Inject noise into the action vector
-    noisy_action = action.copy()
-    noisy_action[0:3] += np.random.normal(0, noise_level, 3)  # Add noise to x, y, z positions
-    noisy_action[3:6] += np.random.normal(0, noise_level, 3)  # Add noise to wrist angles
-    if action[6] < -0.2:
-        noisy_action[6] = 1.0  # Open gripper
-    return np.clip(noisy_action, -1.0, 1.0)  # Clip gripper action to [-1, 1]
-
-
-def compute_reward(obs, goal):
-    #TODO: Implement reward function based on the task
-    # This reward is used to evaluate the performance of the agent in the environment
-    # For now, we just return a dummy reward of 0.0
-    return 0.0
 
 
 def get_libero_env(task, resolution, seed):
@@ -154,11 +133,13 @@ def eval_libero(args: Args):
     # Create output directories if they don't exist
     pathlib.Path(args.video_out_path).mkdir(parents=True, exist_ok=True)
     pathlib.Path(args.img_out_path).mkdir(parents=True, exist_ok=True)
+    pathlib.Path(args.data_out_path).mkdir(parents=True, exist_ok=True)
 
     # Initialize LIBERO task suite
     benchmark_dict = benchmark.get_benchmark_dict()
     task_suite = benchmark_dict[args.task_suite_name]()
     num_tasks_in_suite = task_suite.n_tasks
+    logging.info(f"Task suite: {args.task_suite_name}")
 
     max_num_steps = 400  # Maximum number of steps per trial
 
@@ -167,6 +148,11 @@ def eval_libero(args: Args):
 
     # Initialize OpenPI client
     client = _websocket_client_policy.WebsocketClientPolicy(args.host, args.port)
+
+    # Initialize data writer
+    data_writer = writer.Writer(
+        pathlib.Path(args.data_out_path) / f"libero_data_{args.task_suite_name}.tfrecord"
+    )
 
     total_episodes, total_successes = 0, 0
     for task_id in tqdm.tqdm(range(num_tasks_in_suite)):
@@ -181,9 +167,12 @@ def eval_libero(args: Args):
 
         # Start Episode
         task_episodes, task_successes = 0, 0
+
+        # # Init Episode
+        # ep = data_writer.write_episode()
+
         for episode_idx in tqdm.tqdm(range(args.num_trials_per_task)):
             logging.info(f"\nTask: {task_description}")
-            logging.info(f"Episode: {episode_idx + 1}")
             
             # Reset environment and get initial observation
             env.reset()
@@ -200,6 +189,9 @@ def eval_libero(args: Args):
             replay_images_agent = []  # List to store images for replay video
             replay_images_wrist = []  # List to store images for replay video
 
+            step_data = []  # List to store data for RLDS episode
+
+            logging.info(f"Starting episode {task_episodes+1}...")
             while step < max_num_steps + num_steps_wait:
                 try:
                     
@@ -251,9 +243,102 @@ def eval_libero(args: Args):
                         ), f"We want to replan every {args.replan_steps} steps, but policy only predicts {len(action_chunk)} steps."
                         action_plan.extend(action_chunk[: args.replan_steps])
 
+                    # TODO: collect obs, action, reward, done, info for each step
                     action = action_plan.popleft()
 
+                    disturbed_action = action.copy()
+
+                    # Execute action in environment
+                    disturbed_action = sample_noise(
+                        step,
+                        args.noise_insert_step,
+                        args.noise_last_step,
+                        action,
+                        args.noise_type,
+                        args.noise_scale,
+                    )
+                    
+                    # Execute action in environment
+                    obs, reward, done, info = env.step(disturbed_action.tolist())
+
+                    # TODO: add noise injection flag to the record
+                    # Write RLDS step
+                    step_data.append(
+                        {
+                            "observation/image": img,
+                            "observation/wrist_image": wrist_img,
+                            "observation/state": np.concatenate(
+                                (
+                                    obs["robot0_eef_pos"],
+                                    quat2axisangle(obs["robot0_eef_quat"]),
+                                    obs["robot0_gripper_qpos"],
+                                )
+                            ),
+                            "action": disturbed_action,
+                            "reward": reward,
+                            "is_terminal": done,
+                            "prompt": str(task_description),
+                        }
+                    )
+
+                    if done:
+                        task_successes += 1
+                        total_successes += 1
+                        break
+                    step += 1
 
                 except Exception as e:
                     logging.error(f"Error during evaluation: {e}")
                     break
+
+            # Finalize and close RLDS episode
+            ep.end_of_episode()
+
+            task_episodes += 1
+            total_episodes += 1
+
+            # Save the succeded episode
+            if done:
+                # Save video of the episode
+                task_segment = task_description.replace(" ", "_")
+                video_path = pathlib.Path(args.video_out_path)/ task_segment / f"Episode_{task_episodes}.mp4"
+                imageio.mimwrite(
+                    video_path,
+                    [np.asarray(x) for x in replay_images_agent],
+                    fps=10,
+                )
+                logging.info(f"Saved video to {video_path}")
+
+                # save the data to TFRecord
+                ep = data_writer.write_episode()
+                for step_record in step_data:
+                    ep.write_step(step_record)
+                ep.end_of_episode()
+
+            # Log current results
+            logging.info(f"Success: {done}")
+            logging.info(f"# episodes completed so far: {total_episodes}")
+            logging.info(f"# successes: {total_successes} ({total_successes / total_episodes * 100:.1f}%)")
+
+        # Log final results
+        logging.info(f"Current task success rate: {float(task_successes) / float(task_episodes)}")
+        logging.info(f"Current total success rate: {float(total_successes) / float(total_episodes)}")
+
+        # Stack success rates for each task
+        success_rate_list_per_task.append(task_successes / task_episodes)
+        logging.info(f"Success rate for task {task_id}: {task_successes / task_episodes}")
+
+    logging.info(f"Total success rate: {float(total_successes) / float(total_episodes)}")
+    logging.info(f"Total episodes: {total_episodes}")
+
+    # Plot success rate per task
+    plt.plot(success_rate_list_per_task)
+    plt.xlabel("Task ID")
+    plt.ylabel("Success Rate")
+    plt.title("Success Rate per Task")
+    plt.savefig(pathlib.Path(args.img_out_path) / "success_rate_per_task.png")
+
+
+if __name__ == "__main__":
+    logging.basicConfig(level=logging.INFO)
+    tyro.cli(eval_libero)
