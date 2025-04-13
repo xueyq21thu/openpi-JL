@@ -14,12 +14,6 @@ from openpi_client import websocket_client_policy as _websocket_client_policy
 import tqdm
 import tyro
 
-# data collection
-import tempfile
-from envlogger import writer
-from envlogger.backends import tfds_backend
-import rlds  # rlds is a library for RL data storage
-
 # import openpi.models.noise_model as noise_model
 from openpi.models.noise_model import sample_noise
 
@@ -35,7 +29,7 @@ class Args:
     #################################################################################################################
     host: str = "0.0.0.0"
     port: int = 8000
-    resize_size: int = 224
+    resize_size: int = 256
     replan_steps: int = 5
 
     #################################################################################################################
@@ -47,7 +41,7 @@ class Args:
         # libero_spatial task suite with noise injection and replanning
     )
     num_steps_wait: int = 10  # Number of steps to wait for objects to stabilize i n sim
-    num_trials_per_task: int = 1  # Number of rollouts per task
+    num_trials_per_task: int = 100  # Number of rollouts per task
 
     #################################################################################################################
     # Utils
@@ -56,7 +50,7 @@ class Args:
 
     img_out_path: str = "data/libero/images"  # Path to save images
 
-    data_out_path: str = "data/libero/rlds/libero_spatial_no_noops"  # Path to save data
+    data_out_path: str = "data/libero/npy"  # Path to save data
 
     seed: int = 7  # Random Seed (for reproducibility)
 
@@ -131,7 +125,6 @@ def eval_libero(args: Args):
     # Create output directories if they don't exist
     pathlib.Path(args.video_out_path).mkdir(parents=True, exist_ok=True)
     pathlib.Path(args.img_out_path).mkdir(parents=True, exist_ok=True)
-    pathlib.Path(args.data_out_path).mkdir(parents=True, exist_ok=True)
 
     # Initialize LIBERO task suite
     benchmark_dict = benchmark.get_benchmark_dict()
@@ -139,7 +132,7 @@ def eval_libero(args: Args):
     num_tasks_in_suite = task_suite.n_tasks
     logging.info(f"Task suite: {args.task_suite_name}")
 
-    max_num_steps = 400  # Maximum number of steps per trial
+    max_num_steps = 360  # Maximum number of steps per trial
 
     # configure for steps to wait
     num_steps_wait = args.num_steps_wait  # Number of steps to wait for objects to stabilize in sim
@@ -148,10 +141,8 @@ def eval_libero(args: Args):
     client = _websocket_client_policy.WebsocketClientPolicy(args.host, args.port)
 
     # Initialize data writer
-    data_path = pathlib.Path(args.data_out_path) / f"{args.task_suite_name}_no_noops"/ "libero_spatial_no_noops.tfrecord"
+    data_path = pathlib.Path(args.data_out_path) / f"{args.task_suite_name}_no_noops"
     data_path.parent.mkdir(parents=True, exist_ok=True)
-    all_episode = []
-
 
     total_episodes, total_successes = 0, 0
     for task_id in tqdm.tqdm(range(num_tasks_in_suite)):
@@ -168,16 +159,8 @@ def eval_libero(args: Args):
         task_episodes, task_successes = 0, 0
 
         # init RLDS writer
-        rlds_dir = pathlib.Path(args.data_out_path) / f"Task_{task_id}"
-        rlds_dir.mkdir(parents=True, exist_ok=True)
-
-        # Initialize RLDS writer
-        rlds_writer = writer.Writer(
-            logdir=str(rlds_dir),
-            step_key=rlds.STEP,
-            metadata={"task_description": str(task_description)},
-            backend=tfds_backend.TFDSBackend(),
-        )
+        # task_dir = data_path / f"Task_{task_id}"
+        # task_dir.mkdir(parents=True, exist_ok=True)
 
         for episode_idx in tqdm.tqdm(range(args.num_trials_per_task)):
             logging.info(f"\nTask: {task_description}")
@@ -197,7 +180,7 @@ def eval_libero(args: Args):
             replay_images_agent = []  # List to store images for replay video
             replay_images_wrist = []  # List to store images for replay video
 
-            step_data = []  # List to store data for RLDS episode
+            episode = []  # List to store data for RLDS episode
 
             logging.info(f"Starting episode {task_episodes+1}...")
             while step < max_num_steps + num_steps_wait:
@@ -256,15 +239,15 @@ def eval_libero(args: Args):
 
                     disturbed_action = action.copy()
 
-                    # # Execute action in environment
-                    # disturbed_action = sample_noise(
-                    #     step,
-                    #     args.noise_insert_step,
-                    #     args.noise_last_step,
-                    #     action,
-                    #     args.noise_type,
-                    #     args.noise_scale,
-                    # )
+                    # Execute action in environment
+                    disturbed_action = sample_noise(
+                        step,
+                        args.noise_insert_step,
+                        args.noise_last_step,
+                        action,
+                        args.noise_type,
+                        args.noise_scale,
+                    )
                     
                     # Execute action in environment
                     obs, reward, done, info = env.step(disturbed_action.tolist())
@@ -272,15 +255,25 @@ def eval_libero(args: Args):
                     # TODO: add noise injection flag to the record
                     # Write RLDS step
                     episode_step = {
-                        rlds.OBSERVATION: obs,
-                        rlds.ACTION: disturbed_action.tolist(),
-                        rlds.REWARD: reward,
-                        rlds.IS_TERMINAL: done,
-                        rlds.IS_FIRST: (step == args.num_steps_wait),
-                        rlds.IS_LAST: done,
+                        "observation": {
+                            "image": img,
+                            "wrist_image": wrist_img,
+                            "state": np.concatenate(
+                                (
+                                    obs["robot0_eef_pos"],
+                                    quat2axisangle(obs["robot0_eef_quat"]),
+                                    obs["robot0_gripper_qpos"],
+                                )
+                            ),
+                        },
+                        "action": disturbed_action,
+                        "reward": reward,
+                        "discount": 1.0,
+                        "language_instruction": str(task_description),
                     }
 
-                    step_data.append(episode_step)
+                    if step >=num_steps_wait:
+                        episode.append(episode_step)
 
                     if done:
                         task_successes += 1
@@ -310,10 +303,10 @@ def eval_libero(args: Args):
                 )
                 logging.info(f"Saved video to {video_path}")
 
-                # Save RLDS data
-                for step in step_data:
-                    rlds_writer.append(step)
-                rlds_writer.end_episode()
+                # Save npy data
+                npy_path = data_path / f"Episode_{task_id}_{task_episodes}.npy"
+                np.save(npy_path, episode)
+                logging.info(f"Saved episode to {npy_path}")
 
             # Log current results
             logging.info(f"Success: {done}")
@@ -341,7 +334,6 @@ def eval_libero(args: Args):
 
     # Save all episodes to TFRecord
     logging.info(f"Saving all episodes to {data_path}")
-    rlds_writer.close()
 
 
 if __name__ == "__main__":
