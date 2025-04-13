@@ -60,7 +60,7 @@ class Args:
 
     noise_last_step: int = 10  # Steps to keep noise
 
-    noise_scale: float = 0.3  # Scale of noise
+    noise_scale: float = 0.2  # Scale of noise
 
 def quat2axisangle(quat):
 
