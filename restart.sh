@@ -34,6 +34,14 @@ python examples/libero/main.py
 # run the server - second terminal
 uv run scripts/serve_policy.py --env LIBERO
 
+# data conversion - third terminal
+# first install the conda environment
+cd /workspace/rlds_dataset_builder
+conda env create -f environment_ubuntu.yml
+
+conda activate rlds_env
+cd /workspace/openpi-JL/data/libero/npy/libero_spatial_no_noops
+tfds build --overwrite
 
 
 
