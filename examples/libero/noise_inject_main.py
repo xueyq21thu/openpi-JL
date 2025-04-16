@@ -41,7 +41,7 @@ class Args:
         # libero_spatial task suite with noise injection and replanning
     )
     num_steps_wait: int = 10  # Number of steps to wait for objects to stabilize i n sim
-    num_trials_per_task: int = 100  # Number of rollouts per task
+    num_trials_per_task: int = 30  # Number of rollouts per task
 
     #################################################################################################################
     # Utils

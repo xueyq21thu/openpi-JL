@@ -138,13 +138,13 @@ class LiberoSpatialNoNoops(tfds.core.GeneratorBasedBuilder):
         episode_paths = glob.glob(path)
 
         # for smallish datasets, use single-thread parsing
-        # for sample in episode_paths:
-        #     yield _parse_example(sample)
+        for sample in episode_paths:
+            yield _parse_example(sample)
 
         # for large datasets use beam to parallelize data parsing (this will have initialization overhead)
-        beam = tfds.core.lazy_imports.apache_beam
-        return (
-                beam.Create(episode_paths)
-                | beam.Map(_parse_example)
-        )
+        # beam = tfds.core.lazy_imports.apache_beam
+        # return (
+        #         beam.Create(episode_paths)
+        #         | beam.Map(_parse_example)
+        # )
 

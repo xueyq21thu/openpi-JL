@@ -19,6 +19,7 @@ Running this conversion script will take approximately 30 minutes.
 """
 
 import shutil
+import os
 
 from lerobot.common.datasets.lerobot_dataset import LEROBOT_HOME
 from lerobot.common.datasets.lerobot_dataset import LeRobotDataset
@@ -34,6 +35,8 @@ RAW_DATASET_NAMES = [
 def main(data_dir: str = "/workspace/openpi-JL/data/libero/rlds", *, push_to_hub: bool = False):
     # Clean up any existing dataset in the output directory
     output_path = LEROBOT_HOME / REPO_NAME
+    print(f"Output path: {output_path}")
+    
     if output_path.exists():
         shutil.rmtree(output_path)
 
