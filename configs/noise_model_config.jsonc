@@ -1,5 +1,5 @@
-{// This file is used to configure the noise model for the OpenAI LIBERO environment
-    "model": "network",
+{
+"model": "network",
     "dummy": {
         "min_amplitude": 0.02,
         "max_amplitude": 0.2,
@@ -17,7 +17,7 @@
         "dropout": 0.1,
         "mode": "state_image",
         "alpha": 0.01,
-        "image_dim": 196608, // 256*256*3
+        "image_dim": 196608,
         "hidden_size": 128,
         "dim_feedforward": 128
     }

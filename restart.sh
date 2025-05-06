@@ -2,8 +2,11 @@
 # This script is used to set up the environment for running the OpenPI project on a new server.
 
 apt update
-# apt install vim
+apt install vim
 apt install sudo
+
+cd /workspace/openpi-JL
+git submodule update --init --recursive
 
 # Install UV
 wget -qO- https://astral.sh/uv/install.sh | sh
@@ -30,6 +33,7 @@ sudo apt-get install libegl-dev
 export PYTHONPATH=/workspace/openpi-JL/third_party/libero:$PYTHONPATH
 export PYTHONPATH=/workspace/openpi-JL/src:$PYTHONPATH
 python examples/libero/main.py
+python examples/libero/noise_inject_main.py
 
 # run the server - second terminal
 uv run scripts/serve_policy.py --env LIBERO
@@ -43,21 +47,6 @@ conda activate rlds_env
 cd /workspace/openpi-JL/data/libero/npy/libero_spatial_no_noops
 tfds build --overwrite
 
-
-
-
-
-# # install ALOHA_SIM dependencies
-# # uv venv --python 3.10 examples/aloha_sim/.venv
-# source examples/aloha_sim/.venv/bin/activate
-# # uv pip sync examples/aloha_sim/requirements.txt
-# # uv pip install -e packages/openpi-client
-# sudo apt-get install -y libegl1-mesa-dev libgles2-mesa-dev
-
-# # run the ALOHA_SIM
-# MUJOCO_GL=egl python examples/aloha_sim/main.py
-
-
-# # run the server - second terminal
-#  # if in aloha_sim
-# uv run scripts/serve_policy.py --env ALOHA_SIM
+# training the model
+XLA_PYTHON_CLIENT_MEM_FRACTION=0.9 uv run scripts/train.py pi0_fast_libero --exp-name=naive_noise_exp --overwrite
+XLA_PYTHON_CLIENT_MEM_FRACTION=0.9 uv run scripts/train.py pi0_fast_libero_low_mem_noise_finetune --exp-name=naive_noise_exp --overwrite

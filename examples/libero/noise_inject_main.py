@@ -17,7 +17,8 @@ import tyro
 
 # import openpi.models.noise_model as noise_model
 # from openpi.models.noise_model import sample_noise
-from openpi.models.noise_model import DummyNoiseModel, NetworkNoiseModel
+from openpi.models.noise_dummy import DummyNoiseModel
+from openpi.models.noise_net import NetworkNoiseModel
 
 
 import json

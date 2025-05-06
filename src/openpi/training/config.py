@@ -650,6 +650,46 @@ _CONFIGS = [
         num_train_steps=10,
         wandb_enabled=False,
     ),
+    #########################################################################
+    # Training with LoRA and Libero noise injection #
+    #########################################################################
+    TrainConfig(
+        # basic config
+        name="pi0_fast_libero_low_mem_noise_finetune",
+        project_name="CAL",
+        exp_name="naive_noise_exp",
+        model=pi0.Pi0Config(
+            action_dim=7, action_horizon=10, max_token_len=180, paligemma_variant="gemma_2b_lora"
+        ),
+        # data
+        data=LeRobotLiberoDataConfig(
+            repo_id="/workspace/data/lerobot/data/lerobot",
+            base_config=DataConfig(
+                local_files_only=True,
+                prompt_from_task=True,
+            ),
+        ),
+
+        # checkpoint:/workspace/openpi-JL/checkpoints/pi0_fast_libero
+        weight_loader=weight_loaders.CheckpointWeightLoader("./checkpoints/pi0_fast_libero/params"),
+
+        # training param filter
+        freeze_filter=pi0_fast.Pi0FASTConfig(
+            action_dim=7, action_horizon=10, max_token_len=180, paligemma_variant="gemma_2b_lora"
+        ).get_freeze_filter(),
+        # lr_schedule=_optimizer.CosineDecaySchedule(initial_lr=1e-3, decay_steps=10_000),
+        optimizer=_optimizer.AdamW(weight_decay=1e-4),
+        ema_decay=None,
+        batch_size=32,
+        num_train_steps=10_000,
+        log_interval=100,
+        # save_interval=1_000,
+        checkpoint_base_dir="./checkpoints",
+        overwrite=True,
+        # resume=True,
+        # wandb_enabled=True,
+        # fsdp_devices=2,
+    )
 ]
 
 if len({config.name for config in _CONFIGS}) != len(_CONFIGS):
