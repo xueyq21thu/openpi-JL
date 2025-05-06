@@ -11,7 +11,7 @@ class DummyNoiseModel(NoiseModel):
         self.duration = cfg.get('duration', 0) # duration of noise injection in steps
         self.episode_length = cfg.get('episode_length', 220) # length of the total episode
        
-        self.insert_step = None  
+        self.insert_step = None
         self.noise_std = None
         self.current_step = 0 
 
