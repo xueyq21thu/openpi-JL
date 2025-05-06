@@ -254,7 +254,7 @@ def eval_libero(args: Args):
                     ))
 
                     img_flat = img.flatten().astype(np.float32) / 255.0
-                    delta = noise_model.sample(state=state_vec, image=img_flat)
+                    delta = noise_model.sample(state=state_vec, action=action, image=img_flat)
                     disturbed_action = np.clip(np.array(action) + delta.numpy(), -1.0, 1.0)
 
                     # Execute action in environment
