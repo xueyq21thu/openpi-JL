@@ -2,6 +2,7 @@ import collections
 import dataclasses
 import logging
 import math
+import torch
 import pathlib
 
 import imageio
@@ -15,7 +16,21 @@ import tqdm
 import tyro
 
 # import openpi.models.noise_model as noise_model
-from openpi.models.noise_model import sample_noise
+# from openpi.models.noise_model import sample_noise
+from openpi.models.noise_model import DummyNoiseModel, NetworkNoiseModel
+
+
+import json
+with open("./configs/noise_model_config.jsonc", "r") as f:
+    config = json.load(f)
+# Choose model type: 'dummy' or 'network'
+model_type = config.get("model", "dummy")
+if model_type == "dummy":
+    noise_model = DummyNoiseModel(config["dummy"])
+elif model_type == "network":
+    noise_model = NetworkNoiseModel(config["network"])
+else:
+    raise ValueError(f"Unsupported noise model type: {model_type}")
 
 LIBERO_DUMMY_ACTION = [0.0] * 6 + [-1.0]
 LIBERO_ENV_RESOLUTION = 256  # resolution used to render training data
@@ -158,10 +173,6 @@ def eval_libero(args: Args):
         # Start Episode
         task_episodes, task_successes = 0, 0
 
-        # init RLDS writer
-        # task_dir = data_path / f"Task_{task_id}"
-        # task_dir.mkdir(parents=True, exist_ok=True)
-
         for episode_idx in tqdm.tqdm(range(args.num_trials_per_task)):
             logging.info(f"\nTask: {task_description}")
             
@@ -181,11 +192,13 @@ def eval_libero(args: Args):
             replay_images_wrist = []  # List to store images for replay video
 
             episode = []  # List to store data for RLDS episode
+            noise_episode = []  # List to store data for noise model episode
+
+            noise_model.reset()  # Reset noise model for new episode
 
             logging.info(f"Starting episode {task_episodes+1}...")
             while step < max_num_steps + num_steps_wait:
                 try:
-                    
                     if step < num_steps_wait:
                         # IMPORTANT: Do nothing for the first few timesteps because the simulator drops objects
                         # and we need to wait for them to fall
@@ -212,7 +225,6 @@ def eval_libero(args: Args):
                     if not action_plan:
                         # Get action plan from OpenPI server
                         # Previous acton chunk is finished, so we can get a new one
-                        # TODO: Add support for other action types
                         element = {
                             "observation/image": img,
                             "observation/wrist_image": wrist_img,
@@ -227,7 +239,6 @@ def eval_libero(args: Args):
                         }
 
                         # Query model to get action
-                        #TODO: check the output of the model
                         action_chunk = client.infer(element)["actions"]
                         assert (
                             len(action_chunk) >= args.replan_steps
@@ -236,23 +247,24 @@ def eval_libero(args: Args):
 
                     # TODO: collect obs, action, reward, done, info for each step
                     action = action_plan.popleft()
+                    state_vec = np.concatenate((
+                        obs["robot0_eef_pos"],
+                        quat2axisangle(obs["robot0_eef_quat"]),
+                        obs["robot0_gripper_qpos"],
+                    ))
 
-                    disturbed_action = action.copy()
+                    img_flat = img.flatten().astype(np.float32) / 255.0
+                    delta = noise_model.sample(state=state_vec, image=img_flat)
+                    disturbed_action = np.clip(np.array(action) + delta.numpy(), -1.0, 1.0)
 
-                    # Execute action in environment
-                    disturbed_action = sample_noise(
-                        step,
-                        args.noise_insert_step,
-                        args.noise_last_step,
-                        action,
-                        args.noise_type,
-                        args.noise_scale,
-                    )
-                    
                     # Execute action in environment
                     obs, reward, done, info = env.step(disturbed_action.tolist())
+                    
+                    adv_reward = noise_model.compute_reward(
+                        success=bool(info.get("success", False)),
+                        delta=delta if isinstance(delta, torch.Tensor) else torch.tensor(delta)
+                    )
 
-                    # TODO: add noise injection flag to the record
                     # Write RLDS step
                     episode_step = {
                         "observation": {
@@ -272,12 +284,35 @@ def eval_libero(args: Args):
                         "language_instruction": str(task_description),
                     }
 
+                    # Write noise model step
+                    noise_step = {
+                        "observation": {
+                            "image": img,
+                            "wrist_image": wrist_img,
+                            "state": np.concatenate(
+                                (
+                                    obs["robot0_eef_pos"],
+                                    quat2axisangle(obs["robot0_eef_quat"]),
+                                    obs["robot0_gripper_qpos"],
+                                )
+                            ),
+                        },
+                        "action": action,
+                        "delta": delta.numpy(),
+                        "reward": adv_reward,
+                        "success": False
+                    }
+
                     if step >=num_steps_wait:
                         episode.append(episode_step)
+                        noise_episode.append(noise_step)
 
                     if done:
                         task_successes += 1
                         total_successes += 1
+
+                        # Write success to noise model step
+                        noise_episode[-1]["success"] = True
                         break
                     step += 1
 

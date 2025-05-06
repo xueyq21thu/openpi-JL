@@ -2,7 +2,7 @@
 # This script is used to set up the environment for running the OpenPI project on a new server.
 
 apt update
-apt install vim
+# apt install vim
 apt install sudo
 
 # Install UV
