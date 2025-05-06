@@ -19,7 +19,7 @@ GIT_LFS_SKIP_SMUDGE=1 uv pip install -e .
 # Install additional dependencies for Fine Tuning
 uv pip install imageio
 uv pip install tensorflow tensorflow_datasets
-sh dataset.sh
+CUDA_VISIBLE_DEVICES=0 python examples/libero/convert_libero_data_to_lerobot_noise.py
 
 # Install libero dependencies
 uv venv --python 3.8 examples/libero/.venv
