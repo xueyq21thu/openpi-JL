@@ -16,10 +16,12 @@ class DummyNoiseModel(NoiseModel):
         self.current_step = 0 
 
     def reset(self):
-        # Randomly choose a step to insert noise within the episode length
-        self.insert_step = np.random.randint(0, self.episode_length)
+        # Randomly choose a step to insert noise within half of the episode length
+        self.insert_step = np.random.randint(10, self.episode_length / 2)
+        print(f"Insert step: {self.insert_step}")
         # randomly set the noise amplitude within the specified range
         self.noise_std = np.random.uniform(self.min_amp, self.max_amp)
+        print(f"Noise std: {self.noise_std}")
         # reset the current step to 0
         self.current_step = 0
 
@@ -61,6 +63,6 @@ class DummyNoiseModel(NoiseModel):
         self.current_step += 1
         return noise
 
-    def compute_reward(self, obs, goal=None):
+    def compute_reward(self, delta=None, success=None):
         # For the dummy noise model, the reward is always 0.
         return 0.0

@@ -57,7 +57,7 @@ class Args:
         # libero_spatial task suite with noise injection and replanning
     )
     num_steps_wait: int = 10  # Number of steps to wait for objects to stabilize i n sim
-    num_trials_per_task: int = 30  # Number of rollouts per task
+    num_trials_per_task: int = 10  # Number of rollouts per task
 
     #################################################################################################################
     # Utils
@@ -70,13 +70,13 @@ class Args:
 
     seed: int = 7  # Random Seed (for reproducibility)
 
-    noise_type: str = "all"  # Noise type to insert. Options: xyz, wrist, gripper, all
+    # noise_type: str = "all"  # Noise type to insert. Options: xyz, wrist, gripper, all
 
-    noise_insert_step: int = 75  # Step to insert noise
+    # # noise_insert_step: int = 75  # Step to insert noise
 
-    noise_last_step: int = 10  # Steps to keep noise
+    # noise_last_step: int = 10  # Steps to keep noise
 
-    noise_scale: float = 0.2  # Scale of noise
+    # noise_scale: float = 0.2  # Scale of noise
 
 def quat2axisangle(quat):
 
@@ -124,7 +124,7 @@ def get_libero_env(task, resolution, seed):
 
 # Global variables
 success_rate_list_per_task: list = []  # List to store success rates of each task
-
+curr_offset = 10
 
 
 def eval_libero(args: Args):
@@ -254,9 +254,11 @@ def eval_libero(args: Args):
                         obs["robot0_gripper_qpos"],
                     ))
 
+                    # add noise to the action
                     img_flat = img.flatten().astype(np.float32) / 255.0
                     delta = noise_model.sample(state=state_vec, action=action, image=img_flat)
-                    disturbed_action = np.clip(np.array(action) + delta.numpy(), -1.0, 1.0)
+                    delta_np = delta.numpy() if hasattr(delta, "numpy") else delta
+                    disturbed_action = np.clip(np.array(action) + delta_np, -1.0, 1.0)
 
                     # Execute action in environment
                     obs, reward, done, info = env.step(disturbed_action.tolist())
@@ -299,7 +301,7 @@ def eval_libero(args: Args):
                             ),
                         },
                         "action": action,
-                        "delta": delta.numpy(),
+                        "delta": delta_np,
                         "reward": adv_reward,
                         "success": False
                     }
@@ -343,6 +345,17 @@ def eval_libero(args: Args):
                 npy_path = data_path / f"Episode_{task_id}_{task_episodes}.npy"
                 np.save(npy_path, episode)
                 logging.info(f"Saved episode to {npy_path}")
+
+            else:
+                # TODO: save noise model episode
+                # save video with failure tag
+                video_path = pathlib.Path(args.video_out_path)/ f"0{task_id}_{task_segment}" / f"Episode_{task_episodes}_failure.mp4"
+                video_path.parent.mkdir(parents=True, exist_ok=True)
+                imageio.mimwrite(
+                    video_path,
+                    [np.asarray(x) for x in replay_images_agent],
+                    fps=10,
+                )
 
             # Log current results
             logging.info(f"Success: {done}")

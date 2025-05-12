@@ -170,3 +170,4 @@ cython_debug/
 
 # exceptions
 !data/libero/npy/**/*.py
+!data/requirements.txt

@@ -1,10 +1,11 @@
 {
-"model": "network",
+"model": "dummy",
     "dummy": {
-        "min_amplitude": 0.02,
+        "min_amplitude": 0.05,
         "max_amplitude": 0.2,
-        "episode_length": 360,
-        "duration": 10
+        "episode_length": 220,
+        "duration": 10,
+        "noise_type": "all"
     },
     "network": {
         "state_dim": 8,

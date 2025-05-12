@@ -4,6 +4,7 @@
 apt update
 apt install vim
 apt install sudo
+sudo apt install tmux
 
 cd /workspace/openpi-JL
 git submodule update --init --recursive
@@ -16,7 +17,7 @@ source $HOME/.local/bin/env
 GIT_LFS_SKIP_SMUDGE=1 uv sync
 GIT_LFS_SKIP_SMUDGE=1 uv pip install -e .
 
-# Install additional dependencies for Fine Tuning
+# Install additional dependencies for data conversion
 uv pip install imageio
 uv pip install tensorflow tensorflow_datasets
 CUDA_VISIBLE_DEVICES=0 python examples/libero/convert_libero_data_to_lerobot_noise.py
@@ -30,6 +31,8 @@ uv pip install -e third_party/libero
 sudo apt-get install libegl-dev
 
 # run the libero
+cd /workspace/openpi-JL
+source examples/libero/.venv/bin/activate
 export PYTHONPATH=/workspace/openpi-JL/third_party/libero:$PYTHONPATH
 export PYTHONPATH=/workspace/openpi-JL/src:$PYTHONPATH
 python examples/libero/main.py
@@ -43,10 +46,14 @@ uv run scripts/serve_policy.py --env LIBERO
 cd /workspace/rlds_dataset_builder
 conda env create -f environment_ubuntu.yml
 
-conda activate rlds_env
+# build the dataset
+uv venv --python 3.11 data/rlds_env
+source data/rlds_env/bin/activate
+uv pip install -r data/requirements.txt
 cd /workspace/openpi-JL/data/libero/npy/libero_spatial_no_noops
 tfds build --overwrite
 
 # training the model
-XLA_PYTHON_CLIENT_MEM_FRACTION=0.9 uv run scripts/train.py pi0_fast_libero --exp-name=naive_noise_exp --overwrite
+# XLA_PYTHON_CLIENT_MEM_FRACTION=0.9 uv run scripts/train.py pi0_fast_libero --exp-name=naive_noise_exp --overwrite
+uv run scripts/compute_norm_stats.py
 XLA_PYTHON_CLIENT_MEM_FRACTION=0.9 uv run scripts/train.py pi0_fast_libero_low_mem_noise_finetune --exp-name=naive_noise_exp --overwrite

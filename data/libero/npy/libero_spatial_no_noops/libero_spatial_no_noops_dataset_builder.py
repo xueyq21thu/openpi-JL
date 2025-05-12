@@ -1,11 +1,14 @@
+from sys import meta_path
 from typing import Iterator, Tuple, Any
 
+import os
 import glob
 import numpy as np
 import tensorflow as tf
 import tensorflow_datasets as tfds
 import tensorflow_hub as hub
 
+curr_path = os.path.dirname(os.path.abspath(__file__))
 
 class LiberoSpatialNoNoops(tfds.core.GeneratorBasedBuilder):
     """DatasetBuilder for example dataset."""
@@ -90,7 +93,7 @@ class LiberoSpatialNoNoops(tfds.core.GeneratorBasedBuilder):
     def _split_generators(self, dl_manager: tfds.download.DownloadManager):
         """Define data splits."""
         return {
-            'train': self._generate_examples(path='/workspace/openpi-JL/data/libero/npy/libero_spatial_no_noops/Episode_*.npy'),
+            'train': self._generate_examples(path= curr_path + '/Episode_*.npy'),
             # 'val': self._generate_examples(path='/workspace/openpi-JL/data/libero/rlds/val/episode_*.npy'),
         }
 
