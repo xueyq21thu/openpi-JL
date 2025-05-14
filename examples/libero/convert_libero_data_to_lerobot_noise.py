@@ -32,7 +32,7 @@ RAW_DATASET_NAMES = [
 ]  # This task suite is used for the first stage of the training pipeline
 
 
-def main(data_dir: str = "/workspace", *, push_to_hub: bool = False):
+def main(data_dir: str = "/root/tensorflow_datasets", *, push_to_hub: bool = False):
     # Clean up any existing dataset in the output directory
     output_path = LEROBOT_HOME / REPO_NAME
     print(f"Output path: {output_path}")

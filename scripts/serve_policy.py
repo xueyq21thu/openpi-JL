@@ -71,7 +71,9 @@ DEFAULT_CHECKPOINT: dict[EnvMode, Checkpoint] = {
     ),
     EnvMode.LIBERO: Checkpoint(
         config="pi0_fast_libero",
+        # finetuned libero
         dir = "/workspace/openpi-JL/checkpoints/pi0_fast_libero",
+        # dir = "/workspace/openpi-JL/checkpoints/pi0_fast_libero_low_mem_noise_finetune/dummy_noise_exp/2999",
         # uncomment this line to reload the checkpoint from s3
         # dir="s3://openpi-assets/checkpoints/pi0_fast_libero",
     ),

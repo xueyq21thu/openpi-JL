@@ -1,7 +1,7 @@
 import numpy as np
 import torch
 import torch.nn as nn
-from noise_model import NoiseModel
+from noise import NoiseModel
 
 
 class NetworkNoiseModel(NoiseModel, nn.Module):

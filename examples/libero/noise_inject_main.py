@@ -124,7 +124,7 @@ def get_libero_env(task, resolution, seed):
 
 # Global variables
 success_rate_list_per_task: list = []  # List to store success rates of each task
-curr_offset = 10
+curr_offset = 20
 
 
 def eval_libero(args: Args):
@@ -148,7 +148,7 @@ def eval_libero(args: Args):
     num_tasks_in_suite = task_suite.n_tasks
     logging.info(f"Task suite: {args.task_suite_name}")
 
-    max_num_steps = 360  # Maximum number of steps per trial
+    max_num_steps = noise_model.episode_length  # Maximum number of steps per trial
 
     # configure for steps to wait
     num_steps_wait = args.num_steps_wait  # Number of steps to wait for objects to stabilize in sim
@@ -327,11 +327,11 @@ def eval_libero(args: Args):
 
             task_episodes += 1
             total_episodes += 1
+            task_segment = task_description.replace(" ", "_")
 
             # Save the succeded episode
             if done:
                 # Save video of the episode
-                task_segment = task_description.replace(" ", "_")
                 video_path = pathlib.Path(args.video_out_path)/ f"0{task_id}_{task_segment}" / f"Episode_{task_episodes}.mp4"
                 video_path.parent.mkdir(parents=True, exist_ok=True)
                 imageio.mimwrite(
@@ -342,7 +342,7 @@ def eval_libero(args: Args):
                 logging.info(f"Saved video to {video_path}")
 
                 # Save npy data
-                npy_path = data_path / f"Episode_{task_id}_{task_episodes}.npy"
+                npy_path = data_path / f"Episode_{task_id}_{curr_offset+task_episodes}.npy"
                 np.save(npy_path, episode)
                 logging.info(f"Saved episode to {npy_path}")
 

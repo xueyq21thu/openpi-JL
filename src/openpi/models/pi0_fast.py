@@ -18,7 +18,6 @@ logger = logging.getLogger("openpi")
 
 PALIGEMMA_EOS_TOKEN = 1
 
-from openpi.models.noise_model import sample_noise
 
 
 def make_attn_mask(input_mask, mask_ar):

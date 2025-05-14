@@ -1,3 +1,4 @@
+import ssl
 from sys import meta_path
 from typing import Iterator, Tuple, Any
 
@@ -9,6 +10,7 @@ import tensorflow_datasets as tfds
 import tensorflow_hub as hub
 
 curr_path = os.path.dirname(os.path.abspath(__file__))
+split = 25
 
 class LiberoSpatialNoNoops(tfds.core.GeneratorBasedBuilder):
     """DatasetBuilder for example dataset."""
@@ -92,9 +94,12 @@ class LiberoSpatialNoNoops(tfds.core.GeneratorBasedBuilder):
 
     def _split_generators(self, dl_manager: tfds.download.DownloadManager):
         """Define data splits."""
+        all_episode_paths = glob.glob(curr_path + '/Episode_*.npy')
+        train_paths = [path for path in all_episode_paths if int(path.split('_')[-1].split('.')[0]) <= split]
+        val_paths = [path for path in all_episode_paths if int(path.split('_')[-1].split('.')[0]) > split] 
         return {
-            'train': self._generate_examples(path= curr_path + '/Episode_*.npy'),
-            # 'val': self._generate_examples(path='/workspace/openpi-JL/data/libero/rlds/val/episode_*.npy'),
+            'train': self._generate_examples(path = train_paths),
+            'val': self._generate_examples(path=val_paths),
         }
 
     def _generate_examples(self, path) -> Iterator[Tuple[str, Any]]:
@@ -144,7 +149,7 @@ class LiberoSpatialNoNoops(tfds.core.GeneratorBasedBuilder):
         for sample in episode_paths:
             yield _parse_example(sample)
 
-        # for large datasets use beam to parallelize data parsing (this will have initialization overhead)
+        # # for large datasets use beam to parallelize data parsing (this will have initialization overhead)
         # beam = tfds.core.lazy_imports.apache_beam
         # return (
         #         beam.Create(episode_paths)

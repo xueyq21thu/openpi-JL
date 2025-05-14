@@ -657,13 +657,16 @@ _CONFIGS = [
         # basic config
         name="pi0_fast_libero_low_mem_noise_finetune",
         project_name="CAL",
-        exp_name="naive_noise_exp",
+        exp_name="dummy_noise_exp0",
+        
+        # model
         model=pi0_fast.Pi0FASTConfig(
-            action_dim=7, action_horizon=20, max_token_len=180, paligemma_variant="gemma_2b_lora"
+            action_dim=7, action_horizon=10, max_token_len=180, paligemma_variant="gemma_2b_lora"
         ),
         # data
         data=LeRobotLiberoDataConfig(
             repo_id="/workspace/data/lerobot/",
+            # assets=AssetsConfig(asset_id="libero"),
             base_config=DataConfig(
                 local_files_only=True,
                 prompt_from_task=True,
@@ -672,18 +675,19 @@ _CONFIGS = [
 
         # checkpoint:/workspace/openpi-JL/checkpoints/pi0_fast_libero
         weight_loader=weight_loaders.CheckpointWeightLoader("./checkpoints/pi0_fast_libero/params"),
+        # weight_loader=weight_loaders.CheckpointWeightLoader("./checkpoints/pi0_fast_libero_low_mem_noise_finetune/dummy_noise_exp/2999/params"),
 
         # training param filter
         freeze_filter=pi0_fast.Pi0FASTConfig(
-            action_dim=7, action_horizon=20, max_token_len=180, paligemma_variant="gemma_2b_lora"
+            action_dim=7, action_horizon=10, max_token_len=180, paligemma_variant="gemma_2b_lora"
         ).get_freeze_filter(),
         # lr_schedule=_optimizer.CosineDecaySchedule(initial_lr=1e-3, decay_steps=10_000),
-        optimizer=_optimizer.AdamW(weight_decay=1e-4),
+        # optimizer=_optimizer.AdamW(weight_decay=1e-4),
         ema_decay=None,
-        batch_size=32,
-        num_train_steps=3_000,
+        # batch_size=32,
+        num_train_steps=30_000,
         log_interval=50,
-        # save_interval=1_000,
+        save_interval=10_000,
         checkpoint_base_dir="./checkpoints",
         overwrite=True,
         # resume=True,

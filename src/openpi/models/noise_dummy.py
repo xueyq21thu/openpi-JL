@@ -1,5 +1,5 @@
 import numpy as np
-from noise_model import NoiseModel
+from noise import NoiseModel
 
 class DummyNoiseModel(NoiseModel):
     def __init__(self, config=None):

@@ -47,7 +47,6 @@ cd /workspace/rlds_dataset_builder
 conda env create -f environment_ubuntu.yml
 
 # build the dataset
-uv venv --python 3.11 data/rlds_env
 source data/rlds_env/bin/activate
 uv pip install -r data/requirements.txt
 cd /workspace/openpi-JL/data/libero/npy/libero_spatial_no_noops
@@ -56,4 +55,4 @@ tfds build --overwrite
 # training the model
 # XLA_PYTHON_CLIENT_MEM_FRACTION=0.9 uv run scripts/train.py pi0_fast_libero --exp-name=naive_noise_exp --overwrite
 uv run scripts/compute_norm_stats.py
-XLA_PYTHON_CLIENT_MEM_FRACTION=0.9 uv run scripts/train.py pi0_fast_libero_low_mem_noise_finetune --exp-name=naive_noise_exp --overwrite
+XLA_PYTHON_CLIENT_MEM_FRACTION=0.9 uv run scripts/train.py pi0_fast_libero_low_mem_noise_finetune --exp-name=dummy_noise_exp0 --overwrite
