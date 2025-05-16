@@ -34,7 +34,6 @@ class NoiseDataset(Dataset):
     '''
     Noise dataset for noise model training and testing.
     Args:
-
         data_folder (str): Path to the folder containing noise data files.
         transform (callable, optional): Optional transform to be applied on a sample.
         max_seq_len (int, optional): Maximum sequence length for the data.
@@ -125,7 +124,7 @@ class NoiseDataset(Dataset):
 
 # pre-processing
 image_transform = transforms.Compose([
-    transforms.Resize((224, 224)),
+    # transforms.Resize((224, 224)),
     # transforms.ToTensor(),
     transforms.Normalize(
         mean=[0.485, 0.456, 0.406],  # Imagenet标准均值

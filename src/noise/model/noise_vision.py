@@ -45,7 +45,7 @@ class VisionNoiseModel(NoiseModel, nn.Module):
         self.alpha = config.get('alpha', 0.1)
         self.beta = config.get('beta', 1.0)  # semantic alignment weight
 
-        checkpoint_path = "checkpoints/noise/pretraining/vit_b_32-d86f8d99.pth"
+        checkpoint_path = "checkpoints/noise/vit_b_32-d86f8d99.pth"
         if os.path.exists(checkpoint_path):
             vit = vit_b_32(weights=None)
             vit.load_state_dict(torch.load(checkpoint_path))

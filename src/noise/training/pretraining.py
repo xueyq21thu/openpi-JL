@@ -19,6 +19,9 @@ Each trajectory contains:
 """
 
 def pre_training(model, dataloader, config, device):
+    # Set the model to training mode
+    model.train()
+
     optimizer = optim.Adam(model.parameters(), lr=config.get("lr", 1e-4))
     scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=config.get("lr_step", 10), gamma=0.5)
 
@@ -31,11 +34,12 @@ def pre_training(model, dataloader, config, device):
     print("Pretraining started...")
 
     # create the models folder if it doesn't exist
-    os.makedirs("checkpoints/noise/pretraining", exist_ok=True)
+    if not os.path.exists("checkpoints/noise/pretraining"):
+        os.makedirs("checkpoints/noise/pretraining", exist_ok=True)
     print(f"Models will be saved in 'checkpoints/noise/pretraining'")
 
     for epoch in range(epochs):
-        model.train()
+
         total_loss = 0.0
 
         # iterate over the dataset
