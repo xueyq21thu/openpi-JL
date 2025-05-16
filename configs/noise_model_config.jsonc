@@ -1,5 +1,5 @@
 {
-"model": "dummy",
+"model": "network",
     "dummy": {
         "min_amplitude": 0.05,
         "max_amplitude": 0.2,
@@ -7,19 +7,22 @@
         "duration": 10,
         "noise_type": "all"
     },
-    "network": {
+    "history": {
+        "episode_length": 220,
         "state_dim": 8,
         "action_dim": 7,
         "output_dim": 7,
-        "history_length": 4,
+        "history_length": 50,
         "d_model": 64,
         "nhead": 4,
         "num_layers": 2,
         "dropout": 0.1,
-        "mode": "state_image",
-        "alpha": 0.01,
+        "alpha": 0.1,
         "image_dim": 196608,
         "hidden_size": 128,
         "dim_feedforward": 128
+    },
+    "vision": {
+        "image_dim": 196608
     }
 }

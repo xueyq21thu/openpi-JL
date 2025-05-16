@@ -18,6 +18,7 @@ class EnvMode(enum.Enum):
     ALOHA_SIM = "aloha_sim"
     DROID = "droid"
     LIBERO = "libero"
+    LIBERO_NOISE = "libero_noise"
 
 
 @dataclasses.dataclass
@@ -72,10 +73,14 @@ DEFAULT_CHECKPOINT: dict[EnvMode, Checkpoint] = {
     EnvMode.LIBERO: Checkpoint(
         config="pi0_fast_libero",
         # finetuned libero
-        dir = "/workspace/openpi-JL/checkpoints/pi0_fast_libero",
+        # dir = "/workspace/openpi-JL/checkpoints/pi0_fast_libero",
         # dir = "/workspace/openpi-JL/checkpoints/pi0_fast_libero_low_mem_noise_finetune/dummy_noise_exp/2999",
         # uncomment this line to reload the checkpoint from s3
-        # dir="s3://openpi-assets/checkpoints/pi0_fast_libero",
+        dir="s3://openpi-assets/checkpoints/pi0_fast_libero",
+    ),
+    EnvMode.LIBERO_NOISE: Checkpoint(
+        config="pi0_fast_libero_low_mem_noise_finetune",
+        dir = "/workspace/openpi-JL/checkpoints/pi0_fast_libero_low_mem_noise_finetune/dummy_noise_exp/2999",
     ),
 }
 

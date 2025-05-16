@@ -15,11 +15,9 @@ from openpi_client import websocket_client_policy as _websocket_client_policy
 import tqdm
 import tyro
 
-# import openpi.models.noise_model as noise_model
-# from openpi.models.noise_model import sample_noise
-from openpi.models.noise_dummy import DummyNoiseModel
-from openpi.models.noise_net import NetworkNoiseModel
-
+from noise.model.noise_dummy import DummyNoiseModel
+from noise.model.noise_history import HistoryNoiseModel
+from noise.model.noise_vision import VisionNoiseModel
 
 import json
 with open("./configs/noise_model_config.jsonc", "r") as f:
@@ -28,8 +26,10 @@ with open("./configs/noise_model_config.jsonc", "r") as f:
 model_type = config.get("model", "dummy")
 if model_type == "dummy":
     noise_model = DummyNoiseModel(config["dummy"])
-elif model_type == "network":
-    noise_model = NetworkNoiseModel(config["network"])
+elif model_type == "history":
+    noise_model = HistoryNoiseModel(config["history"])
+elif model_type == "vision":
+    noise_model = VisionNoiseModel(config["vision"])
 else:
     raise ValueError(f"Unsupported noise model type: {model_type}")
 
@@ -257,7 +257,10 @@ def eval_libero(args: Args):
                     # add noise to the action
                     img_flat = img.flatten().astype(np.float32) / 255.0
                     delta = noise_model.sample(state=state_vec, action=action, image=img_flat)
-                    delta_np = delta.numpy() if hasattr(delta, "numpy") else delta
+                    if model_type == "network": # network noise models
+                        delta_np = delta.detach().cpu().numpy()
+                    else: # dummy noise model
+                        delta_np = delta.numpy() if hasattr(delta, "numpy") else delta
                     disturbed_action = np.clip(np.array(action) + delta_np, -1.0, 1.0)
 
                     # Execute action in environment
