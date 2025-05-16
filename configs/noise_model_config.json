@@ -1,5 +1,5 @@
 {
-"model": "network",
+"model": "dummy",
     "dummy": {
         "min_amplitude": 0.05,
         "max_amplitude": 0.2,

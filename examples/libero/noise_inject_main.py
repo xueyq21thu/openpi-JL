@@ -15,20 +15,24 @@ from openpi_client import websocket_client_policy as _websocket_client_policy
 import tqdm
 import tyro
 
-from noise.model.noise_dummy import DummyNoiseModel
-from noise.model.noise_history import HistoryNoiseModel
-from noise.model.noise_vision import VisionNoiseModel
+import matplotlib.pyplot as plt
 
 import json
-with open("./configs/noise_model_config.jsonc", "r") as f:
+with open("./configs/noise_model_config.json", "r") as f:
     config = json.load(f)
+
+
+
 # Choose model type: 'dummy' or 'network'
 model_type = config.get("model", "dummy")
 if model_type == "dummy":
+    from noise.model.noise_dummy import DummyNoiseModel
     noise_model = DummyNoiseModel(config["dummy"])
 elif model_type == "history":
+    from noise.model.noise_history import HistoryNoiseModel
     noise_model = HistoryNoiseModel(config["history"])
 elif model_type == "vision":
+    from noise.model.noise_vision import VisionNoiseModel
     noise_model = VisionNoiseModel(config["vision"])
 else:
     raise ValueError(f"Unsupported noise model type: {model_type}")
@@ -36,7 +40,10 @@ else:
 LIBERO_DUMMY_ACTION = [0.0] * 6 + [-1.0]
 LIBERO_ENV_RESOLUTION = 256  # resolution used to render training data
 
-import matplotlib.pyplot as plt
+# Global variables
+success_rate_list_per_task: list = []  # List to store success rates of each task
+curr_offset = 0
+
 
 @dataclasses.dataclass
 class Args:
@@ -114,10 +121,6 @@ def get_libero_env(task, resolution, seed):
     env.seed(seed)  # IMPORTANT: seed seems to affect object positions even when using fixed initial state
     return env, task_description
 
-# Global variables
-success_rate_list_per_task: list = []  # List to store success rates of each task
-curr_offset = 20
-
 
 def eval_libero(args: Args):
     """
@@ -150,10 +153,10 @@ def eval_libero(args: Args):
 
     # Initialize data writer
     data_path = pathlib.Path(args.data_out_path) / f"{args.task_suite_name}_no_noops"
-    data_path.parent.mkdir(parents=True, exist_ok=True)
+    data_path.mkdir(parents=True, exist_ok=True)
 
     noise_out_path = pathlib.Path(args.noise_out_path) / f"{args.task_suite_name}_no_noops"
-    noise_out_path.parent.mkdir(parents=True, exist_ok=True)
+    noise_out_path.mkdir(parents=True, exist_ok=True)
 
     total_episodes, total_successes = 0, 0
     for task_id in tqdm.tqdm(range(num_tasks_in_suite)):
@@ -199,7 +202,7 @@ def eval_libero(args: Args):
                         # IMPORTANT: Do nothing for the first few timesteps because the simulator drops objects
                         # and we need to wait for them to fall
 
-                        obs, reward, done, info = env.step(LIBERO_DUMMY_ACTION) # Dummy action to wait for objects to stabilize
+                        _, _, _, _ = env.step(LIBERO_DUMMY_ACTION) # Dummy action to wait for objects to stabilize
                         step += 1
                         continue
 
@@ -285,27 +288,24 @@ def eval_libero(args: Args):
                         "language_instruction": str(task_description),
                     }
 
+                    episode.append(episode_step)
                     # Write noise model step
                     noise_step = {
                         "state": state_vec,
                         "action": action,
-                        "image": img,
+                        "image": img_flat,
                         "delta": delta_np,
                         "reward": adv_reward,
-                        "success": False
+                        "success": done,
                     }
-
-                    if step >=num_steps_wait:
-                        episode.append(episode_step)
-                        noise_episode.append(noise_step)
+                    noise_episode.append(noise_step)
 
                     if done:
                         task_successes += 1
                         total_successes += 1
-
-                        # Write success to noise model step
-                        noise_episode[-1]["success"] = True
                         break
+
+                    # increment step
                     step += 1
 
                 except Exception as e:

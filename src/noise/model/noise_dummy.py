@@ -1,5 +1,5 @@
 import numpy as np
-from noise import NoiseModel
+from noise_model import NoiseModel
 
 class DummyNoiseModel(NoiseModel):
     def __init__(self, config=None):
@@ -17,6 +17,7 @@ class DummyNoiseModel(NoiseModel):
 
     def reset(self):
         # Randomly choose a step to insert noise within half of the episode length
+        # self.insert_step = 75
         self.insert_step = np.random.randint(10, self.episode_length / 2)
         print(f"Insert step: {self.insert_step}")
         # randomly set the noise amplitude within the specified range
@@ -42,9 +43,9 @@ class DummyNoiseModel(NoiseModel):
         if dim > 0:
             # add noise to the last dimension (e.g., gripper open/close)
             if action_val[-1] > 0:
-                noise[-1] = -1 - action_val[-1]
+                noise[-1] = np.random.normal(-self.noise_std, 0)
             else:
-                noise[-1] = 1 - action_val[-1]
+                noise[-1] = np.random.normal(0, self.noise_std)
         return noise
 
     def sample(self, state, action=None, image=None):
@@ -65,4 +66,8 @@ class DummyNoiseModel(NoiseModel):
 
     def compute_reward(self, delta=None, success=None):
         # For the dummy noise model, the reward is always 0.
+        return 0.0
+
+    def compute_loss(self, predicted_delta, target_delta=None, reward=None, state=None, action=None, image=None):
+        # DummyNoiseModel does not compute loss.
         return 0.0

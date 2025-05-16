@@ -39,11 +39,23 @@ class NoiseDataset(Dataset):
         transform (callable, optional): Optional transform to be applied on a sample.
         max_seq_len (int, optional): Maximum sequence length for the data.
     '''
-    def __init__(self, config: dict):
+    def __init__(self, config: dict, transform=None):
         self.config = config
-        self.data_folder = config.get('data_folder', None)
-        self.transform = config.get('transform', None)
+        self.data_folder = config.get('data_dir', None)
+        self.transform = transform
         self.max_seq_len = config.get('max_seq_len', None)
+
+        self.file_list = []
+        print(f"Loading data from {self.data_folder}")
+        if self.data_folder:
+            # Load all .npy files from the data folder
+            self.file_list = glob(os.path.join(self.data_folder, '*.npy'))
+            if not self.file_list:
+                raise ValueError(f"No .npy files found in {self.data_folder}")
+        else:
+            raise ValueError("data_folder is not specified in the config")
+        print(f"Loaded {len(self.file_list)} files from {self.data_folder}")
+
 
     def __len__(self):
         return len(self.file_list)
@@ -51,45 +63,70 @@ class NoiseDataset(Dataset):
     def __getitem__(self, idx):
         path = self.file_list[idx]
         episode_data = np.load(path, allow_pickle=True)
+
+        # lists of noise model data
+        state_list = []
+        action_list = []
+        image_list = []
+        delta_list = []
+        reward_list = []
+        success_list = []
+                
+        # episode_data is a list of dicts        
+        for step in episode_data:
+            state_list.append(step["state"])
+            action_list.append(step["action"])
+            delta_list.append(step["delta"])
+            reward_list.append(step["reward"])
+
+            # [H, W, C] -> [C, H, W]
+            image = step["image"]
+            if image.ndim == 3 and image.shape[-1] == 3:
+                image = image.transpose(2, 0, 1)
+            image_list.append(image)
+
+            # convert success to float
+            success = step["success"]
+            if isinstance(success, bool):
+                success = float(success)
+            success_list.append(success)
         
-        # episode_data is a list of dicts
-        trajectories = []
-        for traj in episode_data:
-            states = torch.tensor(traj["state"], dtype=torch.float32)         # [T, state_dim]
-            actions = torch.tensor(traj["action"], dtype=torch.float32)       # [T, action_dim]
-            
-            images = traj["image"]                                            # [T, C, H, W] or [T, H, W, C]
-            if images.shape[-1] == 3:  # Convert [T, H, W, C] to [T, C, H, W]
-                images = images.transpose(0, 3, 1, 2)
-            images = torch.tensor(images, dtype=torch.float32) / 255.0
+        # Convert lists to tensors
+        states = torch.tensor(np.array(state_list), dtype=torch.float32)         # [T, state_dim]
+        actions = torch.tensor(np.array(action_list), dtype=torch.float32)       # [T, action_dim]
+        deltas = torch.tensor(np.array(delta_list), dtype=torch.float32)         # [T, action_dim]
+        rewards = torch.tensor(np.array(reward_list), dtype=torch.float32)       # [T, action_dim]
+        images = torch.tensor(np.array(image_list), dtype=torch.float32) / 255.0  # [T, C, H, W]
+        successes = torch.tensor(np.array(success_list), dtype=torch.float32)         # [T, 1]
 
-            if self.transform:
-                images = torch.stack([self.transform(img) for img in images])  # apply transform per frame
+        # Normalize images
+        if self.transform:
+            images = torch.stack([self.transform(img) for img in images])
+        
+        traj_tensor = {
+            "state": states,
+            "action": actions,
+            "delta": deltas,
+            "reward": rewards,
+            "image": images,
+            "success": successes
+        }
+        # If max_seq_len is specified, truncate the sequences
+        if self.max_seq_len:
+            traj_tensor["state"] = states[:self.max_seq_len]
+            traj_tensor["action"] = actions[:self.max_seq_len]
+            traj_tensor["delta"] = deltas[:self.max_seq_len]
+            traj_tensor["reward"] = rewards[:self.max_seq_len]
+            traj_tensor["image"] = images[:self.max_seq_len]
+            traj_tensor["success"] = successes[:self.max_seq_len]
 
-            success = traj.get("success", None)
-            if success is not None:
-                success = torch.tensor(success, dtype=torch.float32)
+        return traj_tensor  # single episode data
 
-            if self.max_seq_len:
-                states = states[:self.max_seq_len]
-                actions = actions[:self.max_seq_len]
-                images = images[:self.max_seq_len]
-
-            traj_tensor = {
-                "state": states,
-                "action": actions,
-                "image": images,
-                "success": success,
-            }
-            trajectories.append(traj_tensor)
-
-        return trajectories  # batch of episodes
-    
 
 # pre-processing
 image_transform = transforms.Compose([
     transforms.Resize((224, 224)),
-    transforms.ToTensor(),
+    # transforms.ToTensor(),
     transforms.Normalize(
         mean=[0.485, 0.456, 0.406],  # Imagenet标准均值
         std=[0.229, 0.224, 0.225]

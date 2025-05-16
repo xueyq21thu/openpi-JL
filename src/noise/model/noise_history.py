@@ -1,7 +1,7 @@
 import numpy as np
 import torch
 import torch.nn as nn
-from noise import NoiseModel
+from noise_model import NoiseModel
 
 
 class HistoryNoiseModel(NoiseModel, nn.Module):

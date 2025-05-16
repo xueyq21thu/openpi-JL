@@ -2,8 +2,9 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torchvision.models import resnet18, vit_b_16, vit_b_32
-from torchvision.models import ResNet18_Weights, ViT_B_16_Weights, ViT_B_32_Weights
-from noise import NoiseModel
+# from torchvision.models import ResNet18_Weights, ViT_B_16_Weights, ViT_B_32_Weights
+from noise_model import NoiseModel
+import os
 
 """
 VisionNoiseModel is a neural network model designed to generate noise for actions in a vision-based environment. 
@@ -44,9 +45,24 @@ class VisionNoiseModel(NoiseModel, nn.Module):
         self.alpha = config.get('alpha', 0.1)
         self.beta = config.get('beta', 1.0)  # semantic alignment weight
 
-        self.image_decoder = nn.Sequential(
-            vit_b_32(weights=ViT_B_32_Weights.IMAGENET1K_V1),
-            nn.Linear(1024, self.d_model),
+        checkpoint_path = "checkpoints/noise/pretraining/vit_b_32-d86f8d99.pth"
+        if os.path.exists(checkpoint_path):
+            vit = vit_b_32(weights=None)
+            vit.load_state_dict(torch.load(checkpoint_path))
+            print(f"Loaded ViT checkpoint from {checkpoint_path}")
+        else:
+            print(f"ViT Checkpoint not found at {checkpoint_path}, downloading checkpoints...")
+            vit = vit_b_32(pretrained=True)
+        
+        # Set the vit classifier to identity
+        vit.heads = nn.Identity()
+        vit_output_dim = vit.hidden_dim
+
+        # image encoder: PreTrained Vision Transformer(ViT)
+        self.image_encoder = nn.Sequential(
+            vit,
+            nn.LayerNorm(vit_output_dim),
+            nn.Linear(vit_output_dim, self.d_model),
         )
 
         # action / state encoder
@@ -67,8 +83,9 @@ class VisionNoiseModel(NoiseModel, nn.Module):
         )
 
         self.delta_history = []
+        self.delta_amp_list = []
 
-    def cumpute_noise(self, state, action, image):
+    def compute_noise(self, state, action=None, image=None):
         '''
         Compute the noise based on the state, action, and image.
         The cross module attention is used to align the state and action with the image.
@@ -80,16 +97,27 @@ class VisionNoiseModel(NoiseModel, nn.Module):
         Return:
             Delta: noise with randomized amplitude and direction.
         '''
+        # img shape: torch.tensor[1, 78, 3, 224, 224], unstack to [78, 3, 224, 224]
+        if image is not None and image.ndim == 5 and image.shape[0] == 1:
+            image = image.squeeze(0) # [1, S, C, H, W] -> [S, C, H, W]
         x_state = self.state_encoder(state)     # (B, D)
-        x_action = self.action_encoder(action)  # (B, D)
-        x_image = self.image_encoder(image)     # (B, D)
+        x_action = self.action_encoder(action)  # (1, B, D)
+        x_image = self.image_encoder(image)     # (1, B, D)
 
-        # reshape for attention: (B, 1, D) -> (B, S, D)
+        # squeeze x_action and x_state to (B, D)
+        x_state = x_state.squeeze(0)  # (1, B, D) -> (B, D)
+        x_action = x_action.squeeze(0)  # (1, B, D) -> (B, D)
+
+        # reshape for attention: (B, D) -> (B, 1, D)
         query = x_image.unsqueeze(1)  # image: query
         key_value = torch.stack([x_state, x_action], dim=1)  # state + action: keys/values
 
-        attn_out, _ = self.cross_attn(query, key_value, key_value)
+        attn_out, _ = self.cross_attention(query, key_value, key_value)
         delta = self.delta_head(attn_out.squeeze(1))
+
+        # calculate the amplitude of delta
+        delta_amp = torch.norm(delta, p=2, dim=-1)
+        self.delta_amp_list.append(delta_amp.item())
         return delta
     
     def forward(self, state, action, image):
@@ -102,7 +130,7 @@ class VisionNoiseModel(NoiseModel, nn.Module):
         Return:
             Delta: noise with randomized amplitude and direction.
         """
-        delta = self.cumpute_noise(state, action, image)
+        delta = self.compute_noise(state, action, image)
         return delta
     
     def sample(self, state, action=None, image=None):

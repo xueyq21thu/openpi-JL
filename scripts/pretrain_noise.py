@@ -16,23 +16,24 @@ def load_config(config_path):
 
 def parse_args():
     parser = argparse.ArgumentParser(description="Noise Model Pretraining Script")
-    parser.add_argument('--config', type=str, required=True, help='Path to YAML config file')
-    parser.add_argument('--project', type=str, default='noise-pretrain', help='wandb project name')
+    parser.add_argument('--config', type=str, default='configs/noise_model_pretraining.json', help='Path to json config file')
+    parser.add_argument('--project', type=str, default='CAL', help='wandb project name')
     parser.add_argument('--name', type=str, default='baseline', help='wandb run name')
     return parser.parse_args()
 
 def main():
     args = parse_args()
-    config = load_config(args.config)
+    training_config = load_config(args.config)
+    model_config = load_config(training_config['model_config'])["vision"]
 
-    wandb.init(project=args.project, name=args.name, config=config, save_code=True)
+    wandb.init(project=args.project, name=args.name, config=training_config, save_code=True)
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    dataset = NoiseDataset(config = config)
-    dataloader = DataLoader(dataset, batch_size=config['batch_size'], shuffle=True)
+    dataset = NoiseDataset(config = training_config, transform=image_transform)
+    dataloader = DataLoader(dataset, batch_size=training_config['batch_size'], shuffle=True)
 
-    model = VisionNoiseModel(config).to(device)
-    pre_training(model, dataloader, config, device)
+    model = VisionNoiseModel(model_config).to(device)
+    pre_training(model, dataloader, training_config, device)
 
 if __name__ == '__main__':
     main()

@@ -48,7 +48,7 @@ def pre_training(model, dataloader, config, device):
 
             # forward pass
             optimizer.zero_grad()
-            predicted_delta = model.sample(state, action, image)
+            predicted_delta = model(state, action, image)
 
             if use_supervised and target_delta is not None:
                 loss = model.compute_loss(predicted_delta, target_delta)
@@ -70,6 +70,7 @@ def pre_training(model, dataloader, config, device):
         # log the loss
         if (epoch + 1) % log_freq == 0:
             wandb.log({"epoch": epoch + 1, "loss": avg_loss, "lr": scheduler.get_last_lr()[0]})
+            print(f"Epoch [{epoch + 1}/{epochs}], Loss: {avg_loss:.4f}, Learning Rate: {scheduler.get_last_lr()[0]:.6f}")
         
         # save the model
         if (epoch + 1) % model_save_freq == 0:
