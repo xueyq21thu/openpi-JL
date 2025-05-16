@@ -45,7 +45,7 @@ class Args:
     #################################################################################################################
     host: str = "0.0.0.0"
     port: int = 8000
-    resize_size: int = 256
+    resize_size: int = 224
     replan_steps: int = 5
 
     #################################################################################################################
@@ -67,16 +67,11 @@ class Args:
     img_out_path: str = "data/libero/images"  # Path to save images
 
     data_out_path: str = "data/libero/npy"  # Path to save data
+    
+    noise_out_path: str = "data/libero/noise"  # Path to save noise data
 
     seed: int = 7  # Random Seed (for reproducibility)
 
-    # noise_type: str = "all"  # Noise type to insert. Options: xyz, wrist, gripper, all
-
-    # # noise_insert_step: int = 75  # Step to insert noise
-
-    # noise_last_step: int = 10  # Steps to keep noise
-
-    # noise_scale: float = 0.2  # Scale of noise
 
 def quat2axisangle(quat):
 
@@ -99,7 +94,6 @@ def quat2axisangle(quat):
 
     return (quat[:3] * 2.0 * math.acos(quat[3])) / den
 
-
 def get_libero_env(task, resolution, seed):
     """
     Get the LIBERO environment and task description.
@@ -119,8 +113,6 @@ def get_libero_env(task, resolution, seed):
     env = OffScreenRenderEnv(**env_args)
     env.seed(seed)  # IMPORTANT: seed seems to affect object positions even when using fixed initial state
     return env, task_description
-
-
 
 # Global variables
 success_rate_list_per_task: list = []  # List to store success rates of each task
@@ -159,6 +151,9 @@ def eval_libero(args: Args):
     # Initialize data writer
     data_path = pathlib.Path(args.data_out_path) / f"{args.task_suite_name}_no_noops"
     data_path.parent.mkdir(parents=True, exist_ok=True)
+
+    noise_out_path = pathlib.Path(args.noise_out_path) / f"{args.task_suite_name}_no_noops"
+    noise_out_path.parent.mkdir(parents=True, exist_ok=True)
 
     total_episodes, total_successes = 0, 0
     for task_id in tqdm.tqdm(range(num_tasks_in_suite)):
@@ -292,18 +287,9 @@ def eval_libero(args: Args):
 
                     # Write noise model step
                     noise_step = {
-                        "observation": {
-                            "image": img,
-                            "wrist_image": wrist_img,
-                            "state": np.concatenate(
-                                (
-                                    obs["robot0_eef_pos"],
-                                    quat2axisangle(obs["robot0_eef_quat"]),
-                                    obs["robot0_gripper_qpos"],
-                                )
-                            ),
-                        },
+                        "state": state_vec,
                         "action": action,
+                        "image": img,
                         "delta": delta_np,
                         "reward": adv_reward,
                         "success": False
@@ -350,7 +336,6 @@ def eval_libero(args: Args):
                 logging.info(f"Saved episode to {npy_path}")
 
             else:
-                # TODO: save noise model episode
                 # save video with failure tag
                 video_path = pathlib.Path(args.video_out_path)/ f"0{task_id}_{task_segment}" / f"Episode_{task_episodes}_failure.mp4"
                 video_path.parent.mkdir(parents=True, exist_ok=True)
@@ -359,6 +344,11 @@ def eval_libero(args: Args):
                     [np.asarray(x) for x in replay_images_agent],
                     fps=10,
                 )
+            
+            # save noise model episode
+            noise_npy_path = noise_out_path / f"Episode_{task_id}_{curr_offset+task_episodes}.npy"
+            np.save(noise_npy_path, noise_episode)
+            logging.info(f"Saved noise model episode to {noise_npy_path}")
 
             # Log current results
             logging.info(f"Success: {done}")

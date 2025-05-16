@@ -12,7 +12,7 @@ class HistoryNoiseModel(NoiseModel, nn.Module):
         # Config parameters
         self.state_dim = cfg.get('state_dim')
         self.action_dim = cfg.get('action_dim')
-        self.image_dim = cfg.get('image_dim')
+        
         self.output_dim = cfg.get('output_dim')
 
         self.episode_length = cfg.get('episode_length', 220)

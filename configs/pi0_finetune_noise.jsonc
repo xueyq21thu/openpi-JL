@@ -1,25 +1,28 @@
 {// TODO: modify this config to my own finetune config
-    // 训练任务唯一标识符，用于生成checkpoint、asset目录等
-    "name": "lerobot_pi0_finetune",
+    // training single config name
+    "name": "pi0_fast_libero_low_mem_noise_finetune",
   
-    // wandb 项目名，可忽略
-    "project_name": "openpi",
+    // wandb 
+    "project_name": "CAL",
   
-    // 实验名称（用于输出目录）
-    "exp_name": "pi0_lerobot_aug",
+    // experiment name
+    "exp_name": "dummy_noise_exp00",
   
-    // 模型配置（Pi0 是默认的）
+    // model: pi0 fast_libero
     "model": {
-      "_target_": "openpi.models.pi0.Pi0Config"
+      "_target_": "openpi.models.pi0_fast.Pi0FASTConfig",
+      "action_dim": 7,
+      "action_horizontal": 10,
+      "max_len_token": 180
     },
   
-    // 权重加载器：从已有模型加载
+    // weight_loader config: checkpoint weight loader
     "weight_loader": {
-      "_target_": "openpi.training.weight_loaders.PathLoader",
-      "path": "./checkpoints/pi0_base/checkpoint_29000.pkl"  // 👈 你的预训练模型路径
+      "_target_": "openpi.training.weight_loaders.CheckpointWeightLoader",
+      "path": "./checkpoints/pi0_fast_libero/params"  // my own checkpoint path
     },
   
-    // 数据配置：你自定义的LerobotDataConfig
+    // 
     "data": {
       "_target_": "openpi.data.datasets.lerobot_config.LerobotDataConfig",
       "data_dir": "./data/lerobot_augmented"  // 👈 你转好的数据路径

@@ -18,11 +18,19 @@
         "num_layers": 2,
         "dropout": 0.1,
         "alpha": 0.1,
-        "image_dim": 196608,
+
         "hidden_size": 128,
         "dim_feedforward": 128
     },
     "vision": {
-        "image_dim": 196608
+        "image_dim": [3, 224, 224],
+        "state_dim": 8,
+        "action_dim": 7,
+        "n_heads": 4,
+        "output_dim": 7,
+
+        "alpha": 0.1,
+        "d_model": 128,
+        "beta": 1.0
     }
 }
