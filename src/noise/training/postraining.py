@@ -37,10 +37,17 @@ def post_training(model, dataloader, config, device):
 
         for episode in tqdm(dataloader, desc=f"Epoch {epoch+1}/{epochs}"):
             # Unpack episode tensors
-            states = episode["state"].to(device)         # [T, state_dim]
-            actions = episode["action"].to(device)       # [T, action_dim]
-            images = episode["image"].to(device)         # [T, C, H, W]
-            successes = episode["success"].to(device)    # [T, 1] or [T]
+            states = episode["state"].to(device)         # [1, T, state_dim]
+            actions = episode["action"].to(device)       # [1, T, action_dim]
+            images = episode["image"].to(device)         # [1, T, C, H, W]
+            successes = episode["success"].to(device)    # [1, T]
+
+            # squeeze the first dimension
+            states = states.squeeze(0)                  # [T, state_dim]
+            actions = actions.squeeze(0)                # [T, action_dim]
+            images = images.squeeze(0)                  # [T, C, H, W]
+            successes = successes.squeeze(0)            # [T]
+            
 
             # Forward pass
             optimizer.zero_grad()
@@ -48,7 +55,7 @@ def post_training(model, dataloader, config, device):
 
             # Compute Reward for each step
             rewards = torch.tensor([
-                model.compute_reward(success, delta)
+                model.compute_reward(success.item(), delta)
                 for success, delta in zip(successes, deltas)
             ], device=device)
 

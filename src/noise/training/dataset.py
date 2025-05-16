@@ -82,6 +82,11 @@ class NoiseDataset(Dataset):
             image = step["image"]
             if image.ndim == 3 and image.shape[-1] == 3:
                 image = image.transpose(2, 0, 1)
+            if image.ndim == 1:
+                image = np.zeros((3, 224, 224), dtype=np.uint8)
+            elif image.ndim == 4 and image.shape[0] == 1:
+                image = image.squeeze(0)
+        
             image_list.append(image)
 
             # convert success to float

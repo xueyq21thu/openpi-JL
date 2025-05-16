@@ -43,9 +43,9 @@ class DummyNoiseModel(NoiseModel):
         if dim > 0:
             # add noise to the last dimension (e.g., gripper open/close)
             if action_val[-1] > 0:
-                noise[-1] = np.random.normal(-self.noise_std, 0)
+                noise[-1] = -1 + np.random.normal(0, self.noise_std)
             else:
-                noise[-1] = np.random.normal(0, self.noise_std)
+                noise[-1] = 1 - np.random.normal(0, self.noise_std)
         return noise
 
     def sample(self, state, action=None, image=None):

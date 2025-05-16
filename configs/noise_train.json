@@ -1,5 +1,5 @@
 {
-  "task": "pretraining",
+  "task": "postraining",
   "pretraining": {
     "data_dir": "data/libero/noise/libero_spatial_no_noops",
     "max_seq_len": null,

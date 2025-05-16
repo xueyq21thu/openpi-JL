@@ -83,7 +83,6 @@ class VisionNoiseModel(NoiseModel, nn.Module):
         )
 
         self.delta_history = []
-        self.delta_amp_list = []
 
     def compute_noise(self, state, action=None, image=None):
         '''
@@ -115,9 +114,6 @@ class VisionNoiseModel(NoiseModel, nn.Module):
         attn_out, _ = self.cross_attention(query, key_value, key_value)
         delta = self.delta_head(attn_out.squeeze(1))
 
-        # calculate the amplitude of delta
-        delta_amp = torch.norm(delta, p=2, dim=-1)
-        self.delta_amp_list.append(delta_amp.item())
         return delta
     
     def forward(self, state, action, image):
