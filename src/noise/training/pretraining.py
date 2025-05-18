@@ -73,14 +73,14 @@ def pre_training(model, dataloader, config, device):
 
         # log the loss
         if (epoch + 1) % log_freq == 0:
-            wandb.log({"epoch": epoch + 1, "loss": avg_loss, "lr": scheduler.get_last_lr()[0]})
+            # wandb.log({"epoch": epoch + 1, "loss": avg_loss, "lr": scheduler.get_last_lr()[0]})
             print(f"Epoch [{epoch + 1}/{epochs}], Loss: {avg_loss:.4f}, Learning Rate: {scheduler.get_last_lr()[0]:.6f}")
         
         # save the model
-        if (epoch + 1) % model_save_freq == 0:
-            torch.save(model.state_dict(), f"models/noise_model_{epoch+1}.pth")
+        # if (epoch + 1) % model_save_freq == 0:
+        #     torch.save(model.state_dict(), f"models/noise_model_{epoch+1}.pth")
 
     # save the final model
-    torch.save(model.state_dict(), f"models/noise_model_final.pth")
+    torch.save(model.state_dict(), f"checkpoints/noise/pretraining/noise_model_pretraining.pth")
 
     print(f"Pretraining completed. Final model saved as 'models/noise_model_final.pth'")
