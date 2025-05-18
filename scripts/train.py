@@ -192,7 +192,7 @@ def train_step(
 
 
 def main(config: _config.TrainConfig):
-# def main(config: str = "configs/pi0_noise_finetune.json"):
+# def main(config: str = "configs/pi0_noise_ft.jsonc"):
     """Main function to train the model."""
     init_logging()
     logging.info(f"Running on: {platform.node()}")

@@ -15,6 +15,10 @@ class DummyNoiseModel(NoiseModel):
         self.noise_std = None
         self.current_step = 0 
 
+        self.noise_type = cfg.get('noise_type', 'all')
+        self.seed = cfg.get('seed', 42)
+        np.random.seed(self.seed)
+
     def reset(self):
         # Randomly choose a step to insert noise within half of the episode length
         # self.insert_step = 75

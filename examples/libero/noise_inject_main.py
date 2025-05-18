@@ -21,8 +21,6 @@ import json
 with open("./configs/noise_model_config.json", "r") as f:
     config = json.load(f)
 
-
-
 # Choose model type: 'dummy' or 'network'
 model_type = config.get("model", "dummy")
 if model_type == "dummy":
@@ -42,7 +40,7 @@ LIBERO_ENV_RESOLUTION = 256  # resolution used to render training data
 
 # Global variables
 success_rate_list_per_task: list = []  # List to store success rates of each task
-curr_offset = 0
+curr_offset = 20
 
 
 @dataclasses.dataclass

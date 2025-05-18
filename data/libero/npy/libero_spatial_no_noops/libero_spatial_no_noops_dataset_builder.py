@@ -31,13 +31,13 @@ class LiberoSpatialNoNoops(tfds.core.GeneratorBasedBuilder):
                 'steps': tfds.features.Dataset({
                     'observation': tfds.features.FeaturesDict({
                         'image': tfds.features.Image(
-                            shape=(256, 256, 3),
+                            shape=(224, 224, 3),
                             dtype=np.uint8,
                             encoding_format='png',
                             doc='Main camera RGB observation.',
                         ),
                         'wrist_image': tfds.features.Image(
-                            shape=(256, 256, 3),
+                            shape=(224, 224, 3),
                             dtype=np.uint8,
                             encoding_format='png',
                             doc='Wrist camera RGB observation.',
@@ -94,12 +94,13 @@ class LiberoSpatialNoNoops(tfds.core.GeneratorBasedBuilder):
 
     def _split_generators(self, dl_manager: tfds.download.DownloadManager):
         """Define data splits."""
-        all_episode_paths = glob.glob(curr_path + '/Episode_*.npy')
-        train_paths = [path for path in all_episode_paths if int(path.split('_')[-1].split('.')[0]) <= split]
-        val_paths = [path for path in all_episode_paths if int(path.split('_')[-1].split('.')[0]) > split] 
+        all_episode_paths = curr_path + '/Episode_*.npy'
+        # all_episode_paths = glob.glob(curr_path + '/Episode_*.npy')
+        # train_paths = curr_path + '/Episode_[0-9]|1[0-9]|2[0-5].npy'
+        # val_paths = curr_path + '/Episode_2[6-9]|[3-9][0-9]+.npy'
         return {
-            'train': self._generate_examples(path = train_paths),
-            'val': self._generate_examples(path=val_paths),
+            'train': self._generate_examples(path = all_episode_paths),
+            # 'val': self._generate_examples(path=val_paths),
         }
 
     def _generate_examples(self, path) -> Iterator[Tuple[str, Any]]:
@@ -115,10 +116,16 @@ class LiberoSpatialNoNoops(tfds.core.GeneratorBasedBuilder):
                 # compute Kona language embedding
                 language_embedding = self._embed([step['language_instruction']])[0].numpy()
 
+                image = step['observation']['image']
+                wrist_image = step['observation']['wrist_image']
+
+                image_resized = tf.image.resize(image, [224, 224], method='bilinear').numpy().astype(np.uint8)
+                wrist_image_resized = tf.image.resize(wrist_image, [224, 224], method='bilinear').numpy().astype(np.uint8)
+
                 episode.append({
                     'observation': {
-                        'image': step['observation']['image'],
-                        'wrist_image': step['observation']['wrist_image'],
+                        'image': image_resized,
+                        'wrist_image': wrist_image_resized,
                         'state': step['observation']['state'],
                     },
                     'action': step['action'],
