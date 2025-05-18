@@ -50,7 +50,7 @@ class Args:
     #################################################################################################################
     host: str = "0.0.0.0"
     port: int = 8000
-    resize_size: int = 224
+    resize_size: int = 256
     replan_steps: int = 5
 
     #################################################################################################################
@@ -192,6 +192,7 @@ def eval_libero(args: Args):
             noise_episode = []  # List to store data for noise model episode
 
             noise_model.reset()  # Reset noise model for new episode
+            collect_step = noise_model.insert_step + noise_model.duration
 
             logging.info(f"Starting episode {task_episodes+1}...")
             while step < max_num_steps + num_steps_wait:
@@ -267,36 +268,36 @@ def eval_libero(args: Args):
                         delta=delta if isinstance(delta, torch.Tensor) else torch.tensor(delta)
                     )
 
-                    # Write RLDS step
-                    episode_step = {
-                        "observation": {
-                            "image": img,
-                            "wrist_image": wrist_img,
-                            "state": np.concatenate(
-                                (
-                                    obs["robot0_eef_pos"],
-                                    quat2axisangle(obs["robot0_eef_quat"]),
-                                    obs["robot0_gripper_qpos"],
-                                )
-                            ),
-                        },
-                        "action": disturbed_action,
-                        "reward": reward,
-                        "discount": 1.0,
-                        "language_instruction": str(task_description),
-                    }
-
-                    episode.append(episode_step)
-                    # Write noise model step
-                    noise_step = {
-                        "state": state_vec,
-                        "action": action,
-                        "image": img_flat,
-                        "delta": delta_np,
-                        "reward": adv_reward,
-                        "success": done,
-                    }
-                    noise_episode.append(noise_step)
+                    # Write data step
+                    if step >= collect_step:
+                        episode_step = {
+                            "observation": {
+                                "image": img,
+                                "wrist_image": wrist_img,
+                                "state": np.concatenate(
+                                    (
+                                        obs["robot0_eef_pos"],
+                                        quat2axisangle(obs["robot0_eef_quat"]),
+                                        obs["robot0_gripper_qpos"],
+                                    )
+                                ),
+                            },
+                            "action": disturbed_action,
+                            "reward": reward,
+                            "discount": 1.0,
+                            "language_instruction": str(task_description),
+                        }
+                        episode.append(episode_step)
+                        # Write noise model step
+                        noise_step = {
+                            "state": state_vec,
+                            "action": action,
+                            "image": img_flat,
+                            "delta": delta_np,
+                            "reward": adv_reward,
+                            "success": done,
+                        }
+                        noise_episode.append(noise_step)
 
                     if done:
                         task_successes += 1
@@ -329,9 +330,14 @@ def eval_libero(args: Args):
                 logging.info(f"Saved video to {video_path}")
 
                 # Save npy data
-                npy_path = data_path / f"Episode_{task_id}_{curr_offset+task_episodes}.npy"
-                np.save(npy_path, episode)
-                logging.info(f"Saved episode to {npy_path}")
+                if len(episode) > 0:
+                    # Save npy data
+                    npy_path = pathlib.Path(args.data_out_path) / f"Episode_{task_id}_{curr_offset+task_episodes}.npy"
+                    np.save(npy_path, episode)
+                    logging.info(f"Saved episode to {npy_path}")
+                else:
+                    logging.warning(f"Episode {task_episodes} is empty, not saving.")
+                    continue
 
             else:
                 # save video with failure tag
@@ -344,9 +350,15 @@ def eval_libero(args: Args):
                 )
             
             # save noise model episode
-            noise_npy_path = noise_out_path / f"Episode_{task_id}_{curr_offset+task_episodes}.npy"
-            np.save(noise_npy_path, noise_episode)
-            logging.info(f"Saved noise model episode to {noise_npy_path}")
+            if len(noise_episode) > 0:
+                noise_npy_path = pathlib.Path(args.noise_out_path) / f"Episode_{task_id}_{curr_offset+task_episodes}.npy"
+                noise_npy_path.parent.mkdir(parents=True, exist_ok=True)
+                # Save noise model episode
+                np.save(noise_npy_path, noise_episode)
+                logging.info(f"Saving noise model episode to {noise_npy_path}")
+            else:
+                logging.warning(f"Noise model episode {task_episodes} is empty, not saving.")
+                continue
 
             # Log current results
             logging.info(f"Success: {done}")
