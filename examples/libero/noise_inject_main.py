@@ -40,7 +40,7 @@ LIBERO_ENV_RESOLUTION = 256  # resolution used to render training data
 
 # Global variables
 success_rate_list_per_task: list = []  # List to store success rates of each task
-curr_offset = 20
+curr_offset = 0 # Offset for episode numbering
 
 
 @dataclasses.dataclass
@@ -62,7 +62,7 @@ class Args:
         # libero_spatial task suite with noise injection and replanning
     )
     num_steps_wait: int = 10  # Number of steps to wait for objects to stabilize i n sim
-    num_trials_per_task: int = 10  # Number of rollouts per task
+    num_trials_per_task: int = 20  # Number of rollouts per task
 
     #################################################################################################################
     # Utils
@@ -288,16 +288,18 @@ def eval_libero(args: Args):
                             "language_instruction": str(task_description),
                         }
                         episode.append(episode_step)
-                        # Write noise model step
-                        noise_step = {
-                            "state": state_vec,
-                            "action": action,
-                            "image": img_flat,
-                            "delta": delta_np,
-                            "reward": adv_reward,
-                            "success": done,
-                        }
-                        noise_episode.append(noise_step)
+
+
+                    # Write noise model step
+                    noise_step = {
+                        "state": state_vec,
+                        "action": action,
+                        "image": img_flat,
+                        "delta": delta_np,
+                        "reward": adv_reward,
+                        "success": done,
+                    }
+                    noise_episode.append(noise_step)
 
                     if done:
                         task_successes += 1

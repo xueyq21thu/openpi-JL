@@ -2,9 +2,9 @@
 # This script is used to set up the environment for running the OpenPI project on a new server.
 
 apt update
-apt install vim
-apt install sudo
-sudo apt install tmux
+apt install vim -y
+apt install sudo -y
+sudo apt install tmux -y
 
 cd /workspace/openpi-JL
 git submodule update --init --recursive
@@ -21,6 +21,7 @@ GIT_LFS_SKIP_SMUDGE=1 uv pip install -e .
 uv pip install imageio
 uv pip install tensorflow tensorflow_datasets
 CUDA_VISIBLE_DEVICES=0 python examples/libero/convert_libero_data_to_lerobot_noise.py
+CUDA_VISIBLE_DEVICES=0 python scripts/libero_dataset.py
 
 # Install libero dependencies
 uv venv --python 3.8 examples/libero/.venv
@@ -38,22 +39,22 @@ export PYTHONPATH=/workspace/openpi-JL/src:$PYTHONPATH
 python examples/libero/main.py
 python examples/libero/noise_inject_main.py
 
-# run the server - second terminal
+# run the server
 uv run scripts/serve_policy.py --env LIBERO
-
-# data conversion - third terminal
-# first install the conda environment
-cd /workspace/rlds_dataset_builder
-conda env create -f environment_ubuntu.yml
-
-# build the dataset
-uv venv --python 3.11 data/rlds_env
-source data/rlds_env/bin/activate
-uv pip install -r data/requirements.txt
-cd /workspace/openpi-JL/data/libero/npy/libero_spatial_no_noops
-tfds build --overwrite
 
 # training the model
 # XLA_PYTHON_CLIENT_MEM_FRACTION=0.9 uv run scripts/train.py pi0_fast_libero --exp-name=naive_noise_exp --overwrite
 uv run scripts/compute_norm_stats.py --config-name pi0_fast_libero_low_mem_noise_finetune
-XLA_PYTHON_CLIENT_MEM_FRACTION=0.9 uv run scripts/train.py pi0_fast_libero_low_mem_noise_finetune --exp-name=dummy_noise_exp1 --overwrite
+XLA_PYTHON_CLIENT_MEM_FRACTION=0.9 uv run scripts/train.py pi0_fast_libero_low_mem_noise_finetune --exp-name=dummy_noise_exp0 --overwrite
+
+# # data conversion - third terminal
+# # first install the conda environment
+# cd /workspace/rlds_dataset_builder
+# conda env create -f environment_ubuntu.yml
+
+# # build the dataset
+# uv venv --python 3.11 data/rlds_env
+# source data/rlds_env/bin/activate
+# uv pip install -r data/requirements.txt
+# cd /workspace/openpi-JL/data/libero/npy/libero_spatial_no_noops
+# tfds build --overwrite

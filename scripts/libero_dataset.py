@@ -6,6 +6,8 @@ and local .npy files into a single LeRobot dataset.
 import shutil
 import os
 import pathlib
+import h5py
+import math
 import numpy as np
 
 from lerobot.common.datasets.lerobot_dataset import LEROBOT_HOME
@@ -38,10 +40,10 @@ HF_DATASET_NAME = "physical-intelligence/libero"
 
 # RLDS Data Source Configuration (from openvla/modified_libero_rlds or similar)
 RLDS_DATASET_NAMES = [
-    # "libero_10_no_noops",
-    # "libero_goal_no_noops",
-    # "libero_object_no_noops",
-    "libero_spatial_no_noops",
+    # "libero_10",
+    # "libero_goal",
+    # "libero_object",
+    "libero_spatial",
 ]
 
 # --- Feature definition - MUST BE CONSISTENT for both datasets ---
@@ -52,10 +54,33 @@ LEROBOT_FEATURES = {
     "wrist_image": {"dtype": "image", "shape": (256, 256, 3), "names": ["height", "width", "channel"]},
     "state": {"dtype": "float32", "shape": (8,), "names": ["state"]}, # e.g., 3 pos, 3 axis-angle, 2 gripper
     "actions": {"dtype": "float32", "shape": (7,), "names": ["actions"]},
-    "language_instruction": {"dtype": "string", "shape": (), "names": ["language_instruction"]}
 }
 
-def main(rlds_data_dir: str = "/workspacec/data/",npy_data_dir: str = "data/libero/", output_path = "/workspace/data", push_to_hub: bool = False):
+def _quat2axisangle(quat):
+    """
+    Copied from robosuite: https://github.com/ARISE-Initiative/robosuite/blob/eafb81f54ffc104f905ee48a16bb15f059176ad3/robosuite/utils/transform_utils.py#L490C1-L512C55
+    """
+    # clip quaternion
+    if quat[3] > 1.0:
+        quat[3] = 1.0
+    elif quat[3] < -1.0:
+        quat[3] = -1.0
+
+    den = np.sqrt(1.0 - quat[3] * quat[3])
+    if math.isclose(den, 0.0):
+        # This is (close to) a zero degree rotation, immediately return
+        return np.zeros(3)
+
+    return (quat[:3] * 2.0 * math.acos(quat[3])) / den
+
+
+
+def main(
+    rlds_data_dir: str = "/workspace/datasets",
+    npy_data_dir: str = "data/libero/npy", 
+    output_path: str = "/workspace/data", 
+    push_to_hub: bool = False
+    ):
     # Clean up any existing dataset in the output directory
     output_path = pathlib.Path(output_path) / LEROBOT_REPO_NAME
     print(f"Output path: {output_path}")
@@ -77,42 +102,61 @@ def main(rlds_data_dir: str = "/workspacec/data/",npy_data_dir: str = "data/libe
     total_episode_processed = 0
     for dataset_name in RLDS_DATASET_NAMES:
         print(f"\nProcessing dataset: {dataset_name}")
-        try:
-            raw_dataset = tfds.load_dataset(
-                dataset_name,
-                data_dir=rlds_data_dir,
-                split="train",
-            )
-            episodes_in_current_rlds = 0
-            for episode in raw_dataset:
-                last_rlds_instruction_str = "Unknown RLDS Task"
-                frame_num = 0
-                for step in episode["steps"].as_numpy_iterator():
-                    try:
-                        # Ensure keys match LEROBOT_FEATURES
+
+        # Load the h5py file
+        dataset_path = os.path.join(rlds_data_dir, dataset_name)
+        print(f"Dataset path: {dataset_path}")
+        for file_name in os.listdir(dataset_path):
+            if not file_name.endswith(".hdf5"):
+                continue
+            dataset_file_path = os.path.join(dataset_path, file_name)
+
+            with h5py.File(dataset_file_path, "r") as f:
+                # Get language instruction from file name
+                # pick_up_the_black_bowl_from_table_center_and_place_it_on_the_plate_demo.hdf5
+                language_instruction = file_name.split(".")[0]
+
+                # get data from the file
+                for episode_idx in f["data"]:
+                    episode = f["data"][episode_idx]
+                    obs = episode["obs"]
+
+                    actions = np.array(episode["actions"]) # Should be (episode_length, action_dim)
+
+                    # Process each step in the episode
+                    frame_num = 0
+
+                    for step_idx in range(actions.shape[0]):
+                        
+                        # image size: (128, 128, 3), type numpy.uint8
+                        image = obs["agentview_rgb"][step_idx]
+                        wrist_image = obs["eye_in_hand_rgb"][step_idx]
+                        # Resize images to (256, 256, 3) if necessary
+                        if image.shape != (256, 256, 3):
+                            image = np.array(PIL.Image.fromarray(image).resize((256, 256)))
+                        if wrist_image.shape != (256, 256, 3):
+                            wrist_image = np.array(PIL.Image.fromarray(wrist_image).resize((256, 256)))
+                        ee_states = np.array(obs["ee_states"][step_idx])
+                        gripper_state = np.array(obs["gripper_states"][step_idx])
+
+                        state = np.concatenate([ee_states, gripper_state])  # (3+3+2=8)
+
+                        # Prepare data for dataset.add_frame
                         frame_data = {
-                            "image": step["observation"]["image"],
-                            "wrist_image": step["observation"]["wrist_image"],
-                            "state": step["observation"]["state"].astype(np.float32), # Ensure dtype
-                            "actions": step["action"].astype(np.float32), # Ensure dtype
-                            "language_instruction": step.get("language_instruction", b"N/A").decode('utf-8', 'ignore')
+                            "image": image,       # Should be HxWxC numpy array
+                            "wrist_image": wrist_image, # Should be HxWxC numpy array
+                            "state": state,       # Should be (state_dim,) numpy array
+                            "actions": actions[step_idx],                   # Should be (action_dim,) numpy array
                         }
+
                         dataset.add_frame(frame_data)
+
                         frame_num += 1
-                        last_rlds_instruction_str = frame_data["language_instruction"]
-                    except Exception as e:
-                        print(f"Key error in RLDS dataset processing: {e}")
-                        print(f"Frame data: {dataset_name}")
-                        continue
-                
-                if frame_num > 0:
-                    dataset.save_episode(task=last_rlds_instruction_str)
-                    episodes_in_current_rlds += 1
-            print(f"Processed {episodes_in_current_rlds} episodes from {dataset_name}")
-            total_episode_processed += episodes_in_current_rlds
-        except Exception as e:
-            print(f"Error Loading dataset {dataset_name}: {e}, skipping...")
-            continue
+                    
+                    if frame_num > 0:
+                        dataset.save_episode(task=language_instruction)
+                        total_episode_processed += 1
+
     print(f"\nTotal RLDS episodes processed: {total_episode_processed}")
     print(f"RLDS dataset processing completed.")
 
@@ -140,7 +184,7 @@ def main(rlds_data_dir: str = "/workspacec/data/",npy_data_dir: str = "data/libe
                 if isinstance(episode_steps, np.ndarray) and episode_steps.dtype == 'object':
                     episode_steps = list(episode_steps)
 
-                last_npy_instruction_str = "Unknown Custom Task"
+                last_npy_instruction_str = "libero_spatial"
                 frame_num = 0
                 # Process each step in the episode
                 for step_idx, step_data in enumerate(episode_steps):
@@ -155,11 +199,21 @@ def main(rlds_data_dir: str = "/workspacec/data/",npy_data_dir: str = "data/libe
                         "wrist_image": step_data["observation"]["wrist_image"], # Should be HxWxC numpy array
                         "state": step_data["observation"]["state"],       # Should be (state_dim,) numpy array
                         "actions": step_data["action"],                   # Should be (action_dim,) numpy array
-                        "language_instruction": step_data.get("language_instruction", b"N/A").decode('utf-8', 'ignore')
                     }
+
                     
                     dataset.add_frame(frame_data)
-                    last_npy_instruction_str = frame_data["language_instruction"]
+
+                    # Get the language instruction
+                    if "language_instruction" in step_data:
+                        last_npy_instruction_str = step_data["language_instruction"]
+                        if isinstance(last_npy_instruction_str, bytes):
+                            last_npy_instruction_str = last_npy_instruction_str.decode('utf-8', 'ignore')
+                        elif isinstance(last_npy_instruction_str, str):
+                            last_npy_instruction_str = last_npy_instruction_str
+                        else:
+                            last_npy_instruction_str = str(last_npy_instruction_str)
+                            
                     frame_num += 1
 
                 if frame_num == 0:
@@ -179,7 +233,7 @@ def main(rlds_data_dir: str = "/workspacec/data/",npy_data_dir: str = "data/libe
 
     # --- 3. Consolidate the dataset ---
     print(f"Consolidating the dataset...")
-    dataset.consolidate(run_compute_stats=False)
+    dataset.consolidate(run_compute_stats=True)
     print(f"Dataset consolidation completed.")
 
     # --- 4. Optionally push to the Hugging Face Hub ---
