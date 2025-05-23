@@ -80,7 +80,7 @@ DEFAULT_CHECKPOINT: dict[EnvMode, Checkpoint] = {
     ),
     EnvMode.LIBERO_NOISE: Checkpoint(
         config="pi0_fast_libero_low_mem_noise_finetune",
-        dir = "/workspace/openpi-JL/checkpoints/pi0_fast_libero_low_mem_noise_finetune/dummy_noise_exp0/29999",
+        dir = "/workspace/openpi-JL/checkpoints/pi0_fast_libero_low_mem_noise_finetune/dummy_noise_exp0/9999",
     ),
 }
 

@@ -19,24 +19,27 @@ Running this conversion script will take approximately 30 minutes.
 """
 
 import shutil
+import pathlib
+
 
 from lerobot.common.datasets.lerobot_dataset import LEROBOT_HOME
 from lerobot.common.datasets.lerobot_dataset import LeRobotDataset
 import tensorflow_datasets as tfds
 import tyro
 
-REPO_NAME = "your_hf_username/libero"  # Name of the output dataset, also used for the Hugging Face Hub
+REPO_NAME = "lerobot_libero"  # Name of the output dataset, also used for the Hugging Face Hub
 RAW_DATASET_NAMES = [
-    "libero_10_no_noops",
-    "libero_goal_no_noops",
-    "libero_object_no_noops",
+    # "libero_10_no_noops",
+    # "libero_goal_no_noops",
+    # "libero_object_no_noops",
     "libero_spatial_no_noops",
 ]  # For simplicity we will combine multiple Libero datasets into one training dataset
 
 
-def main(data_dir: str, *, push_to_hub: bool = False):
+def main(data_dir: str = "/workspace/datasets/modified_libero_rlds", *, push_to_hub: bool = False):
     # Clean up any existing dataset in the output directory
-    output_path = LEROBOT_HOME / REPO_NAME
+    output_path = pathlib.Path("workspace/data/lerobot_libero")
+    print(f"Output path: {output_path}")
     if output_path.exists():
         shutil.rmtree(output_path)
 

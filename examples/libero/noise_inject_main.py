@@ -21,7 +21,7 @@ import json
 with open("./configs/noise_model_config.json", "r") as f:
     config = json.load(f)
 
-# Choose model type: 'dummy' or 'network'
+# Choose model type: 'dummy' or 'history' or 'vision'
 model_type = config.get("model", "dummy")
 if model_type == "dummy":
     from noise.model.noise_dummy import DummyNoiseModel
@@ -76,6 +76,8 @@ class Args:
     noise_out_path: str = "data/libero/noise"  # Path to save noise data
 
     seed: int = 7  # Random Seed (for reproducibility)
+
+    save_data: bool = False  # Save data
 
 
 def quat2axisangle(quat):
@@ -332,14 +334,14 @@ def eval_libero(args: Args):
                 logging.info(f"Saved video to {video_path}")
 
                 # Save npy data
-                if len(episode) > 0:
+                if len(episode) > 0 and args.save_data:
                     # Save npy data
                     npy_path = pathlib.Path(args.data_out_path) / f"Episode_{task_id}_{curr_offset+task_episodes}.npy"
                     np.save(npy_path, episode)
                     logging.info(f"Saved episode to {npy_path}")
-                else:
+                elif len(episode) == 0:
                     logging.warning(f"Episode {task_episodes} is empty, not saving.")
-                    continue
+                    
 
             else:
                 # save video with failure tag
@@ -352,15 +354,15 @@ def eval_libero(args: Args):
                 )
             
             # save noise model episode
-            if len(noise_episode) > 0:
+            if len(noise_episode) > 0 and args.save_data:
                 noise_npy_path = pathlib.Path(args.noise_out_path) / f"Episode_{task_id}_{curr_offset+task_episodes}.npy"
                 noise_npy_path.parent.mkdir(parents=True, exist_ok=True)
                 # Save noise model episode
                 np.save(noise_npy_path, noise_episode)
                 logging.info(f"Saving noise model episode to {noise_npy_path}")
-            else:
+            elif len(noise_episode) == 0:
                 logging.warning(f"Noise model episode {task_episodes} is empty, not saving.")
-                continue
+                
 
             # Log current results
             logging.info(f"Success: {done}")

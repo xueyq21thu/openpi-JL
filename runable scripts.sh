@@ -1,5 +1,9 @@
 # This script is used to collect runable scripts from the openpi-JL repo.
 
+# Reset the environment
+cd /workspace/openpi-JL
+bash restart.sh
+
 # Data conversion from npy collected by myself to lerobot
 CUDA_VISIBLE_DEVICES=0 python examples/libero/convert_npy_to_lerobot.py
 
@@ -7,7 +11,7 @@ CUDA_VISIBLE_DEVICES=0 python examples/libero/convert_npy_to_lerobot.py
 CUDA_VISIBLE_DEVICES=0 python scripts/libero_dataset.py
 
 # run the server
-uv run scripts/serve_policy.py --env LIBERO
+uv run scripts/serve_policy.py --env LIBERO_NOISE
 
 # run the libero evaluation
 cd /workspace/openpi-JL
