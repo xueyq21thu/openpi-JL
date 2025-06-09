@@ -80,13 +80,13 @@ def post_training(model, dataloader, config, device):
             print(f"Epoch [{epoch + 1}/{epochs}], Loss: {avg_loss:.4f}")
 
         # Save the model
-        if (epoch + 1) % model_save_freq == 0:
-            model_path = f"checkpoints/noise/postraining/model_epoch_{epoch + 1}.pth"
-            torch.save(model.state_dict(), model_path)
-            print(f"Model saved at {model_path}")
+        # if (epoch + 1) % model_save_freq == 0:
+        #     model_path = f"checkpoints/noise/postraining/model_epoch_{epoch + 1}.pth"
+        #     torch.save(model.state_dict(), model_path)
+        #     print(f"Model saved at {model_path}")
 
     # Final save of the model
-    final_model_path = "checkpoints/noise/postraining/model_final.pth"
+    final_model_path = "checkpoints/noise/postraining/noise_model_postraining.pth"
     torch.save(model.state_dict(), final_model_path)
     print(f"Post-training completed. Final model saved at {final_model_path}")
 

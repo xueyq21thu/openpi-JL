@@ -173,6 +173,8 @@ class VisionNoiseModel(NoiseModel, nn.Module):
         
         # Supervised learning mode
         if target_delta is not None:
+            if target_delta.ndim > 2:
+                target_delta = target_delta.squeeze(0)
             loss += F.mse_loss(predicted_delta, target_delta)
         
         # Reinforcement learning mode
