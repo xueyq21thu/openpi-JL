@@ -1,4 +1,5 @@
 import torch
+import numpy as np
 import torch.nn as nn
 import torch.nn.functional as F
 from torchvision.models import resnet18, vit_b_16, vit_b_32
@@ -41,8 +42,10 @@ class VisionNoiseModel(NoiseModel, nn.Module):
         self.image_dim = cfg.get('image_dim', [3, 224, 224])
         self.d_model = cfg.get('d_model', 128)
         self.n_heads = cfg.get('n_heads', 8)
+        self.episode_length = cfg.get('episode_length', 220)  # number of frames in an episode
+        self.collect_threshold = cfg.get('threshold', 0.5)  # threshold for collecting noise
 
-        self.alpha = config.get('alpha', 0.1)
+        self.alpha = config.get('alpha', 0.1) # regularization weight
         self.beta = config.get('beta', 1.0)  # semantic alignment weight
 
         checkpoint_path = "checkpoints/noise/vit_b_32-d86f8d99.pth"
@@ -97,21 +100,33 @@ class VisionNoiseModel(NoiseModel, nn.Module):
             Delta: noise with randomized amplitude and direction.
         '''
         # img shape: torch.tensor[1, 78, 3, 224, 224], unstack to [78, 3, 224, 224]
-        if image is not None and image.ndim == 5 and image.shape[0] == 1:
-            image = image.squeeze(0) # [1, S, C, H, W] -> [S, C, H, W]
-        x_state = self.state_encoder(state)     # (B, D)
-        x_action = self.action_encoder(action)  # (1, B, D)
-        x_image = self.image_encoder(image)     # (1, B, D)
+        # if image is not None and image.ndim == 5 and image.shape[0] == 1:
+        #     image = image.squeeze(0) # [1, S, C, H, W] -> [S, C, H, W]
+        if image.ndim == 5 and image.shape[0] == 1:
+            image = image.squeeze(0)
+
+        if state.ndim >= 1 and state.shape[0] == 1:
+            state = state.squeeze(0)  # [1, D] -> [D]
+        if action.ndim >= 1 and action.shape[0] == 1:
+            action = action.squeeze(0)
+        
+        x_state = self.state_encoder(state)     # (S, D)
+        x_action = self.action_encoder(action)  # (1, S, D)
+        x_image = self.image_encoder(image)     # (1, S, D)
+
 
         # print the shapes for debugging
         print(f"x_state shape: {x_state.shape}, x_action shape: {x_action.shape}, x_image shape: {x_image.shape}")
 
-        # # squeeze x_action and x_state to (B, D)
-        # x_state = x_state.squeeze(0)  # (1, B, D) -> (B, D)
-        # x_action = x_action.squeeze(0)  # (1, B, D) -> (B, D)
+        # # # squeeze x_action and x_state to (S, D)
+        if x_action.ndim == 1:
+            x_action = x_action.unsqueeze(0)
+        if # x_state.ndim == 1:
+            x_state = x_state.unsqueeze(0)
+        # x_state = x_state.unsqueeze(0)  # (1, S, D) -> (S, D)
+        # # x_action = x_action.unsqueeze(0)  # (1, S, D) -> (S, D)
 
-        # # reshape for attention: (B, D) -> (B, 1, D)
-        # # query = x_image.unsqueeze(1)  # image: query
+        # reshape for attention: (B, D) -> (B, 1, D)
         query = x_image.unsqueeze(1)  # image: query
         key_value = torch.stack([x_state, x_action], dim=1)  # state + action: keys/values
 
@@ -145,6 +160,19 @@ class VisionNoiseModel(NoiseModel, nn.Module):
         Return:
             Delta: noise with randomized amplitude and direction.
         '''
+
+        state = torch.from_numpy(state.copy()).float()
+        action = torch.from_numpy(action.copy()).float()
+        image = torch.from_numpy(image.copy()).float()
+
+        # if the image is a single image, unsqueeze it to match the batch size
+        if image.ndim == 3:
+            image = image.permute(2, 0, 1)  # [H, W, C] -> [C, H, W]
+            image = image.unsqueeze(0)      # [C, H, W] -> [1, C, H, W]
+        elif image.ndim == 4 and image.shape[0] == 1:
+            image = image.permute(0, 3, 1, 2)  # [1, H, W, C] -> [1, C, H, W]
+            
+
         with torch.no_grad():
             delta = self.forward(state, action, image)
             self.delta_history.append(delta)
@@ -176,6 +204,11 @@ class VisionNoiseModel(NoiseModel, nn.Module):
         """
         
         loss = 0.0 # initialize loss
+
+        if target_delta.ndim > 2 and target_delta.shape[0] == 1:
+            target_delta = target_delta.squeeze(0)
+        if predicted_delta.ndim > 2 and predicted_delta.shape[0] == 1:
+            predicted_delta = predicted_delta.squeeze(0)
         
         # Supervised learning mode
         if target_delta is not None:

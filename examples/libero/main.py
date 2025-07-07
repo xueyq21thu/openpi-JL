@@ -37,14 +37,14 @@ class Args:
         # "libero_10"  # Highly difficult tasks
     )
     num_steps_wait: int = 10  # Number of steps to wait for objects to stabilize i n sim
-    num_trials_per_task: int = 50  # Number of rollouts per task
+    num_trials_per_task: int = 10  # Number of rollouts per task
 
     #################################################################################################################
     # Utils
     #################################################################################################################
-    video_out_path: str = "data/libero/videos"  # Path to save videos
+    video_out_path: str = "data/libero_10/raw_videos"  # Path to save videos
 
-    img_out_path: str = "data/libero/images"  # Path to save images
+    img_out_path: str = "data/libero_10/images"  # Path to save images
 
     seed: int = 7  # Random Seed (for reproducibility)
 
@@ -163,15 +163,9 @@ def eval_libero(args: Args) -> None:
                         action_plan.extend(action_chunk[: args.replan_steps])
 
                     action = action_plan.popleft()
-
-                    disturbed_action = action.copy()
-
+                    
                     # Execute action in environment
-                    disturbed_action = sample_noise(t, args.noise_insert_step, args.noise_last_step, 
-                                                    action, args.noise_type, args.noise_scale)
-
-                    # Execute action in environment
-                    obs, reward, done, info = env.step(disturbed_action.tolist())
+                    obs, reward, done, info = env.step(action.tolist())
                     if done:
                         task_successes += 1
                         total_successes += 1
@@ -215,7 +209,7 @@ def eval_libero(args: Args) -> None:
     plt.xlabel("Task ID")
     plt.ylabel("Success Rate")
     plt.title("Success Rate per Task")
-    plt.savefig(pathlib.Path(args.img_out_path) / "success_rate_per_task.png")
+    plt.savefig(pathlib.Path(args.img_out_path) / "raw_success_rate_per_task.png")
 
 def _get_libero_env(task, resolution, seed):
     """Initializes and returns the LIBERO environment, along with the task description."""

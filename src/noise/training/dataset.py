@@ -1,6 +1,8 @@
 import os
-import numpy as np
+import cv2
 import torch
+import numpy as np
+from tqdm import tqdm
 from torch.utils.data import Dataset, DataLoader
 from torchvision import transforms
 from glob import glob
@@ -83,10 +85,17 @@ class NoiseDataset(Dataset):
             if image.ndim == 3 and image.shape[-1] == 3:
                 image = image.transpose(2, 0, 1)
             if image.ndim == 1:
-                image = np.zeros((3, 224, 224), dtype=np.uint8)
+                image = image.reshape(256, 256, 3)
+                image = cv2.resize(image, (224, 224), interpolation=cv2.INTER_LINEAR).transpose(2, 0, 1)  # reshape to [C, H, W]
+                
             elif image.ndim == 4 and image.shape[0] == 1:
                 image = image.squeeze(0)
-        
+
+            # Check the image size and resize if necessary
+            if image.shape[0] != 3 or image.shape[1] != 224 or image.shape[2] != 224:
+                # Resize the image to 224x224 if it is not already
+                image = cv2.resize(image, (224, 224), interpolation=cv2.INTER_LINEAR)
+
             image_list.append(image)
 
             # convert success to float
@@ -136,6 +145,72 @@ image_transform = transforms.Compose([
         std=[0.229, 0.224, 0.225]
     )
 ])
+
+class StepNoiseDataset(Dataset):
+    '''
+    Step-level dataset for noise model training.
+    Args:
+        config (dict): Configuration dictionary containing data_dir and other parameters.
+        transform (callable, optional): Optional transform to be applied on a sample.
+    '''
+    def __init__(self, config: dict, transform=None):
+        self.config = config
+        self.data_folder = config.get('data_dir', None)
+        self.transform = transform
+
+        self.file_list = glob(os.path.join(self.data_folder, '*.npy'))
+        self.step_index = []  # (episode_idx, step_idx)
+        self.episode_data = []
+
+        # preprocess the data and create step_index
+        for epi_idx, path in enumerate(tqdm(self.file_list, desc="Loading episodes")):
+            episode = np.load(path, allow_pickle=True)
+            self.episode_data.append(episode)
+            for t in range(len(episode)):
+                self.step_index.append((epi_idx, t))
+
+    def __len__(self):
+        return len(self.step_index)
+
+    def __getitem__(self, idx):
+        epi_idx, step_idx = self.step_index[idx]
+        step = self.episode_data[epi_idx][step_idx]
+
+        state = torch.tensor(step["state"], dtype=torch.float32)
+        action = torch.tensor(step["action"], dtype=torch.float32)
+        delta = torch.tensor(step["delta"], dtype=torch.float32)
+        reward = torch.tensor(step["reward"], dtype=torch.float32)
+
+
+        image = step["image"]
+        if image.ndim == 3 and image.shape[-1] == 3:
+            image = image.transpose(2, 0, 1)
+
+        if image.ndim == 1:
+            image = image.reshape(256, 256, 3)
+            image = cv2.resize(image, (224, 224), interpolation=cv2.INTER_LINEAR).transpose(2, 0, 1)
+
+        elif image.ndim == 4 and image.shape[0] == 1:
+            image = image.squeeze(0)
+
+        if image.shape[1] != 224 or image.shape[2] != 224:
+            image = image.transpose(1, 2, 0)
+            image = cv2.resize(image, (224, 224), interpolation=cv2.INTER_LINEAR)
+            image = image.transpose(2, 0, 1)
+
+        image = torch.tensor(image, dtype=torch.float32) / 255.0
+        if self.transform:
+            image = self.transform(image)
+        success = float(step["success"]) if isinstance(step["success"], bool) else step["success"]
+
+        return {
+            "state": state,
+            "action": action,
+            "delta": delta,
+            "reward": reward,
+            "image": image,
+            "success": torch.tensor(success, dtype=torch.float32)
+        }
 
 # Example usage
 if __name__ == "__main__":

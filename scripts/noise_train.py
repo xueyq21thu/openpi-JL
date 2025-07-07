@@ -8,7 +8,7 @@ import torch
 from torch.utils.data import DataLoader
 
 # import from src
-from noise.training.dataset import NoiseDataset, image_transform
+from noise.training.dataset import NoiseDataset, image_transform, StepNoiseDataset
 from noise.model.noise_vision import VisionNoiseModel
 from noise.training.pretraining import pre_training
 from noise.training.postraining import post_training
@@ -31,7 +31,8 @@ def main():
 
     # Load the dataset
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    dataset = NoiseDataset(config = training_config, transform=image_transform)
+    # dataset = NoiseDataset(config = training_config, transform=image_transform)
+    dataset = NoiseDataset(config=training_config, transform=image_transform)
     dataloader = DataLoader(dataset, batch_size=training_config['batch_size'], shuffle=True)
 
     # Create the model

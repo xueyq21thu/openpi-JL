@@ -29,16 +29,16 @@ import tyro
 
 REPO_NAME = "lerobot_libero"  # Name of the output dataset, also used for the Hugging Face Hub
 RAW_DATASET_NAMES = [
-    # "libero_10_no_noops",
-    # "libero_goal_no_noops",
-    # "libero_object_no_noops",
+    "libero_10_no_noops",
+    "libero_goal_no_noops",
+    "libero_object_no_noops",
     "libero_spatial_no_noops",
 ]  # For simplicity we will combine multiple Libero datasets into one training dataset
 
 
 def main(data_dir: str = "/workspace/datasets/modified_libero_rlds", *, push_to_hub: bool = False):
     # Clean up any existing dataset in the output directory
-    output_path = pathlib.Path("workspace/data/lerobot_libero")
+    output_path = pathlib.Path("/workspace/data/lerobot_libero")
     print(f"Output path: {output_path}")
     if output_path.exists():
         shutil.rmtree(output_path)

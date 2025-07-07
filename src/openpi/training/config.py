@@ -507,17 +507,20 @@ _CONFIGS = [
     ),
     TrainConfig(
         name="pi0_libero_low_mem_finetune",
+        project_name="CAL",
+        exp_name="pi0_libero_lora",
         # Here is an example of loading a pi0 model for LoRA fine-tuning.
         model=pi0.Pi0Config(paligemma_variant="gemma_2b_lora", action_expert_variant="gemma_300m_lora"),
         data=LeRobotLiberoDataConfig(
-            repo_id="physical-intelligence/libero",
+            repo_id="/workspace/data/lerobot_libero",
             base_config=DataConfig(
-                local_files_only=False,  # Set to True for local-only datasets.
+                local_files_only=True,  # Set to True for local-only datasets.
                 prompt_from_task=True,
             ),
         ),
-        weight_loader=weight_loaders.CheckpointWeightLoader("s3://openpi-assets/checkpoints/pi0_base/params"),
-        num_train_steps=30_000,
+        # weight_loader=weight_loaders.CheckpointWeightLoader("s3://openpi-assets/checkpoints/pi0_base/params"),
+        weight_loader=weight_loaders.CheckpointWeightLoader("/workspace/openpi-JL/checkpoints/pi0_base/params"),
+        num_train_steps=50_000,
         # The freeze filter defines which parameters should be frozen during training.
         # We have a convenience function in the model config that returns the default freeze filter
         # for the given model config for LoRA finetuning. Just make sure it matches the model config
@@ -527,6 +530,14 @@ _CONFIGS = [
         ).get_freeze_filter(),
         # Turn off EMA for LoRA finetuning.
         ema_decay=None,
+
+        # User Configs
+        log_interval=50,
+        save_interval=20_000,
+        checkpoint_base_dir="./checkpoints/pi0_libero_low_mem_finetune",
+        num_workers=4,
+        batch_size=64,
+        resume=True,
     ),
     TrainConfig(
         name="pi0_fast_libero",
@@ -696,17 +707,17 @@ _CONFIGS = [
     ),
     TrainConfig(
         # basic config
-        name="pi0_fast_libero_lora_libero",
+        name="pi0_libero_lora_noise",
         project_name="CAL",
-        exp_name="libero_raw_exp",
+        exp_name="libero_noise_2",
         # model
-        model=pi0_fast.Pi0FASTConfig(
-            action_dim=7, action_horizon=10, max_token_len=180, paligemma_variant="gemma_2b_lora"
+        model=pi0.Pi0Config(
+            paligemma_variant="gemma_2b_lora", action_expert_variant="gemma_300m_lora"
         ),
 
         # data
         data=LeRobotLiberoDataConfig(
-            repo_id="/workspace/data/lerobot_libero/",
+            repo_id="/workspace/data/lerobot_noise/",
             # assets=AssetsConfig(asset_id="libero"),
             base_config=DataConfig(
                 local_files_only=True,
@@ -714,22 +725,23 @@ _CONFIGS = [
             ),
         ),
         # checkpoint:/workspace/openpi-JL/checkpoints/pi0_fast_libero
-        weight_loader=weight_loaders.CheckpointWeightLoader("./checkpoints/pi0_fast_libero/params"),
-        # weight_loader=weight_loaders.CheckpointWeightLoader("./checkpoints/pi0_fast_libero_low_mem_noise_finetune/dummy_noise_exp00/29999/params"),
+        # weight_loader=weight_loaders.CheckpointWeightLoader("./checkpoints/pi0_base/params"),
+        weight_loader=weight_loaders.CheckpointWeightLoader("/workspace/openpi-JL/checkpoints/pi0_libero_lora_noise/libero_noise_2/9999/params"),
         # training param filter
-        freeze_filter=pi0_fast.Pi0FASTConfig(
-            action_dim=7, action_horizon=10, max_token_len=180, paligemma_variant="gemma_2b_lora"
+        freeze_filter=pi0.Pi0Config(
+            paligemma_variant="gemma_2b_lora", action_expert_variant="gemma_300m_lora"
         ).get_freeze_filter(),
 
         lr_schedule=_optimizer.CosineDecaySchedule(),
         # optimizer=_optimizer.AdamW(weight_decay=1e-8),
         ema_decay=None,
-        # batch_size=32,
-        num_train_steps=5_000,
+        batch_size=32,
+        num_train_steps=20_000,
         log_interval=50,
-        save_interval=5000,
+        # save_interval=10_000,
         checkpoint_base_dir="./checkpoints",
-        overwrite=False,
+        # overwrite=True,
+        # fsdp_devices=2, # 2 devices for FSDP
         resume=True, # resume from the last checkpoint
     )
 ]
