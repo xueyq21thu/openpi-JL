@@ -103,13 +103,19 @@ class VisionNoiseModel(NoiseModel, nn.Module):
         x_action = self.action_encoder(action)  # (1, B, D)
         x_image = self.image_encoder(image)     # (1, B, D)
 
-        # squeeze x_action and x_state to (B, D)
-        x_state = x_state.squeeze(0)  # (1, B, D) -> (B, D)
-        x_action = x_action.squeeze(0)  # (1, B, D) -> (B, D)
+        # print the shapes for debugging
+        print(f"x_state shape: {x_state.shape}, x_action shape: {x_action.shape}, x_image shape: {x_image.shape}")
 
-        # reshape for attention: (B, D) -> (B, 1, D)
+        # # squeeze x_action and x_state to (B, D)
+        # x_state = x_state.squeeze(0)  # (1, B, D) -> (B, D)
+        # x_action = x_action.squeeze(0)  # (1, B, D) -> (B, D)
+
+        # # reshape for attention: (B, D) -> (B, 1, D)
+        # # query = x_image.unsqueeze(1)  # image: query
         query = x_image.unsqueeze(1)  # image: query
         key_value = torch.stack([x_state, x_action], dim=1)  # state + action: keys/values
+
+        print(f"query shape: {query.shape}, key_value shape: {key_value.shape}")
 
         attn_out, _ = self.cross_attention(query, key_value, key_value)
         delta = self.delta_head(attn_out.squeeze(1))
