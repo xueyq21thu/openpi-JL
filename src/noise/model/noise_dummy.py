@@ -13,6 +13,7 @@ class DummyNoiseModel(NoiseModel):
        
         self.insert_step = None
         self.noise_std = None
+        self.collect_threshold = 0.1 # threshold for collecting data
         self.current_step = 0 
 
         self.noise_type = cfg.get('noise_type', 'all')

@@ -32,6 +32,12 @@ elif model_type == "history":
 elif model_type == "vision":
     from noise.model.noise_vision import VisionNoiseModel
     noise_model = VisionNoiseModel(config["vision"])
+    # load checkpoint if available
+    if config["vision"].get("checkpoints", None) is not None:
+        chkp = torch.load(config["vision"]["checkpoints"], map_location="cpu")
+        print(f"Loading noise model checkpoint from {config['vision']['checkpoints']}...")
+        noise_model.load_state_dict(chkp, strict=False)
+        print("Checkpoint loaded successfully.")
 else:
     raise ValueError(f"Unsupported noise model type: {model_type}")
 
@@ -40,7 +46,7 @@ LIBERO_ENV_RESOLUTION = 256  # resolution used to render training data
 
 # Global variables
 success_rate_list_per_task: list = []  # List to store success rates of each task
-curr_offset = 20 # Offset for episode numbering
+curr_offset = 40 # Offset for episode numbering
 
 
 @dataclasses.dataclass
@@ -50,7 +56,7 @@ class Args:
     #################################################################################################################
     host: str = "0.0.0.0"
     port: int = 8000
-    resize_size: int = 256
+    resize_size: int = 224
     replan_steps: int = 5
 
     #################################################################################################################
@@ -67,7 +73,7 @@ class Args:
     #################################################################################################################
     # Utils
     #################################################################################################################
-    video_out_path: str = "data/libero/videos"  # Path to save videos
+    video_out_path: str = "data/libero/videos_250617"  # Path to save videos
 
     img_out_path: str = "data/libero/images"  # Path to save images
 
@@ -77,7 +83,7 @@ class Args:
 
     seed: int = 7  # Random Seed (for reproducibility)
 
-    save_data: bool = False  # Save data
+    save_data: bool = True  # Save data
 
 
 def quat2axisangle(quat):
@@ -194,16 +200,22 @@ def eval_libero(args: Args):
             noise_episode = []  # List to store data for noise model episode
 
             noise_model.reset()  # Reset noise model for new episode
-            collect_step = noise_model.insert_step + noise_model.duration
+            
+            collect_threshold = noise_model.collect_threshold
+            is_collecting = False
 
             logging.info(f"Starting episode {task_episodes+1}...")
+
+            done = False
+
             while step < max_num_steps + num_steps_wait:
                 try:
                     if step < num_steps_wait:
                         # IMPORTANT: Do nothing for the first few timesteps because the simulator drops objects
                         # and we need to wait for them to fall
 
-                        _, _, _, _ = env.step(LIBERO_DUMMY_ACTION) # Dummy action to wait for objects to stabilize
+                        obs, reward, done, info = env.step(LIBERO_DUMMY_ACTION) # Dummy action to wait for objects to stabilize
+
                         step += 1
                         continue
 
@@ -254,16 +266,24 @@ def eval_libero(args: Args):
                     ))
 
                     # add noise to the action
-                    img_flat = img.flatten().astype(np.float32) / 255.0
+                    img_flat = img.astype(np.float32) / 255.0
                     delta = noise_model.sample(state=state_vec, action=action, image=img_flat)
-                    if model_type == "network": # network noise models
+                    if model_type == "history" or model_type == "vision":
                         delta_np = delta.detach().cpu().numpy()
                     else: # dummy noise model
                         delta_np = delta.numpy() if hasattr(delta, "numpy") else delta
+
+                    # check and squeeze delta
+                    if delta_np.ndim > 1:
+                        delta_np = delta_np.squeeze()
                     disturbed_action = np.clip(np.array(action) + delta_np, -1.0, 1.0)
+
+                    # Log the action and delta
+                    # env.step(disturbed_action.tolist())  # Apply the action to the environment
 
                     # Execute action in environment
                     obs, reward, done, info = env.step(disturbed_action.tolist())
+                    # obs, reward, done, info = env.step(action.tolist())
                     
                     adv_reward = noise_model.compute_reward(
                         success=bool(info.get("success", False)),
@@ -271,7 +291,7 @@ def eval_libero(args: Args):
                     )
 
                     # Write data step
-                    if step >= collect_step:
+                    if is_collecting:
                         episode_step = {
                             "observation": {
                                 "image": img,
@@ -290,6 +310,10 @@ def eval_libero(args: Args):
                             "language_instruction": str(task_description),
                         }
                         episode.append(episode_step)
+
+                    if not is_collecting and np.linalg.norm(delta_np) > collect_threshold:
+                        logging.info(f"Collecting data at step {step + 1} with delta {delta_np} and threshold {collect_threshold}")
+                        is_collecting = True
 
 
                     # Write noise model step
@@ -386,10 +410,11 @@ def eval_libero(args: Args):
     plt.xlabel("Task ID")
     plt.ylabel("Success Rate")
     plt.title("Success Rate per Task")
-    plt.savefig(pathlib.Path(args.img_out_path) / "success_rate_per_task.png")
+    plt.savefig(pathlib.Path(args.img_out_path) / f"success_rate_per_task_sr{float(total_successes) / float(total_episodes)}.png")
 
     # Save all episodes to TFRecord
     logging.info(f"Saving all episodes to {data_path}")
+
 
 
 if __name__ == "__main__":
