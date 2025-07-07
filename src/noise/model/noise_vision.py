@@ -115,16 +115,9 @@ class VisionNoiseModel(NoiseModel, nn.Module):
         x_image = self.image_encoder(image)     # (1, S, D)
 
 
-        # print the shapes for debugging
-        print(f"x_state shape: {x_state.shape}, x_action shape: {x_action.shape}, x_image shape: {x_image.shape}")
-
-        # # # squeeze x_action and x_state to (S, D)
-        if x_action.ndim == 1:
-            x_action = x_action.unsqueeze(0)
-        if # x_state.ndim == 1:
-            x_state = x_state.unsqueeze(0)
-        # x_state = x_state.unsqueeze(0)  # (1, S, D) -> (S, D)
-        # # x_action = x_action.unsqueeze(0)  # (1, S, D) -> (S, D)
+        # squeeze x_action and x_state to (B, D)
+        x_state = x_state.squeeze(0)  # (1, B, D) -> (B, D)
+        x_action = x_action.squeeze(0)  # (1, B, D) -> (B, D)
 
         # reshape for attention: (B, D) -> (B, 1, D)
         query = x_image.unsqueeze(1)  # image: query
