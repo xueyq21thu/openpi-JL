@@ -54,7 +54,7 @@ class FusionNoiseModel(NoiseModel, nn.Module):
         """
         Helper method to construct all the neural network layers.
         """
-        clip_model_name = self.config.get('clip_model_name', "openai/clip-vit-base-patch32")
+        clip_model_name = self.config.get('clip_model_path', "openai/clip-vit-base-patch32")
         
         # --- 1. Load Pre-trained CLIP Encoders for Semantic Understanding ---
         self.clip_processor = CLIPProcessor.from_pretrained(clip_model_name)
@@ -98,6 +98,9 @@ class FusionNoiseModel(NoiseModel, nn.Module):
             nn.GELU(),
             nn.Linear(self.d_model // 2, 1)
         )
+
+        # configure
+        self.episode_length = self.config.get('episode_length', 360)
 
     # ==========================================================================
     # --- Core Forward Pass ---

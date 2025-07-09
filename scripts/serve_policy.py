@@ -71,13 +71,13 @@ DEFAULT_CHECKPOINT: dict[EnvMode, Checkpoint] = {
         dir="s3://openpi-assets/ch eckpoints/pi0_fast_droid",
     ),
     EnvMode.LIBERO: Checkpoint(
-        config="pi0_libero_lora_noise",
+        config="pi0_fast_libero",
         # finetuned libero
-        dir="/workspace/openpi-JL/checkpoints/pi0_libero_low_mem_finetune/pi0_libero_low_mem_finetune/pi0_libero_lora/49999",
+        # dir="/workspace/openpi-JL/checkpoints/pi0_libero_low_mem_finetune/pi0_libero_low_mem_finetune/pi0_libero_lora/49999",
         # dir = "/workspace/openpi-JL/checkpoints/pi0_fast_libero",
         # dir = "/workspace/openpi-JL/checkpoints/pi0_fast_libero_low_mem_noise_finetune/dummy_noise_exp00/29999",
         # uncomment this line to reload the checkpoint from s3
-        # dir="s3://openpi-assets/checkpoints/pi0_fast_libero",
+        dir="s3://openpi-assets/checkpoints/pi0_fast_libero",
     ),
     EnvMode.LIBERO_NOISE: Checkpoint(
         # config="pi0_fast_libero_low_mem_noise_finetune",

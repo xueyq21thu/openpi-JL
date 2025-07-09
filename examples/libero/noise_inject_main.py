@@ -1,3 +1,8 @@
+# noise_inject_main.py
+
+import os
+os.environ["TOKENIZERS_PARALLELISM"] = "false"
+
 import collections
 import dataclasses
 import logging
@@ -38,6 +43,9 @@ elif model_type == "vision":
         print(f"Loading noise model checkpoint from {config['vision']['checkpoints']}...")
         noise_model.load_state_dict(chkp, strict=False)
         print("Checkpoint loaded successfully.")
+elif model_type == "fusion":
+    from noise.model.noise_fusion import FusionNoiseModel
+    noise_model = FusionNoiseModel(config["fusion"])
 else:
     raise ValueError(f"Unsupported noise model type: {model_type}")
 
@@ -46,7 +54,7 @@ LIBERO_ENV_RESOLUTION = 256  # resolution used to render training data
 
 # Global variables
 success_rate_list_per_task: list = []  # List to store success rates of each task
-curr_offset = 40 # Offset for episode numbering
+curr_offset = 0 # Offset for episode numbering
 
 
 @dataclasses.dataclass
@@ -83,7 +91,7 @@ class Args:
 
     seed: int = 7  # Random Seed (for reproducibility)
 
-    save_data: bool = True  # Save data
+    save_data: bool = False  # Save data
 
 
 def quat2axisangle(quat):
@@ -201,7 +209,6 @@ def eval_libero(args: Args):
 
             noise_model.reset()  # Reset noise model for new episode
             
-            collect_threshold = noise_model.collect_threshold
             is_collecting = False
 
             logging.info(f"Starting episode {task_episodes+1}...")
@@ -265,30 +272,75 @@ def eval_libero(args: Args):
                         obs["robot0_gripper_qpos"],
                     ))
 
-                    # add noise to the action
-                    img_flat = img.astype(np.float32) / 255.0
-                    delta = noise_model.sample(state=state_vec, action=action, image=img_flat)
-                    if model_type == "history" or model_type == "vision":
-                        delta_np = delta.detach().cpu().numpy()
-                    else: # dummy noise model
-                        delta_np = delta.numpy() if hasattr(delta, "numpy") else delta
+                    # # add noise to the action
+                    # img_flat = img.astype(np.float32) / 255.0
+                    # delta = noise_model.sample(state=state_vec, action=action, image=img_flat)
+                    # if model_type == "history" or model_type == "vision":
+                    #     delta_np = delta.detach().cpu().numpy()
+                    # else: # dummy noise model
+                    #     delta_np = delta.numpy() if hasattr(delta, "numpy") else delta
 
-                    # check and squeeze delta
-                    if delta_np.ndim > 1:
-                        delta_np = delta_np.squeeze()
-                    disturbed_action = np.clip(np.array(action) + delta_np, -1.0, 1.0)
+                    # # check and squeeze delta
+                    # if delta_np.ndim > 1:
+                    #     delta_np = delta_np.squeeze()
+                    # disturbed_action = np.clip(np.array(action) + delta_np, -1.0, 1.0)
 
-                    # Log the action and delta
-                    # env.step(disturbed_action.tolist())  # Apply the action to the environment
+                    # # Log the action and delta
+                    # # env.step(disturbed_action.tolist())  # Apply the action to the environment
 
-                    # Execute action in environment
-                    obs, reward, done, info = env.step(disturbed_action.tolist())
-                    # obs, reward, done, info = env.step(action.tolist())
+                    # # Execute action in environment
+                    # obs, reward, done, info = env.step(disturbed_action.tolist())
+                    # # obs, reward, done, info = env.step(action.tolist())
                     
-                    adv_reward = noise_model.compute_reward(
-                        success=bool(info.get("success", False)),
-                        delta=delta if isinstance(delta, torch.Tensor) else torch.tensor(delta)
-                    )
+                    # adv_reward = noise_model.compute_reward(
+                    #     success=bool(info.get("success", False)),
+                    #     delta=delta if isinstance(delta, torch.Tensor) else torch.tensor(delta)
+                    # )
+
+                    if model_type == "fusion":
+                        # 1. Prepare Tensors for the model
+                        state_tensor = torch.from_numpy(state_vec).float().unsqueeze(0).to(noise_model.device)
+                        action_tensor = torch.from_numpy(action.copy()).float().unsqueeze(0).to(noise_model.device)
+                        image_tensor = torch.from_numpy(img).float().permute(2, 0, 1) / 255.0
+                        image_tensor = image_tensor.unsqueeze(0).to(noise_model.device)
+                        
+                        # 2. Call the model's sample method
+                        delta, mask, log_prob = noise_model.sample(
+                            state=state_tensor, 
+                            action=action_tensor, 
+                            image=image_tensor, 
+                            text_instruction=[str(task_description)]
+                        )
+                        
+                        # 3. Convert delta back to NumPy
+                        delta_np = delta.squeeze(0).detach().cpu().numpy()
+                        mask_np = mask.squeeze(0).detach().cpu().numpy()
+
+                        # 4. Apply noise and step the environment
+                        disturbed_action = np.clip(np.array(action) + delta_np, -1.0, 1.0)
+                        obs, reward, done, info = env.step(disturbed_action.tolist())
+                        
+                        # 5. Compute reward using both delta and mask
+                        adv_reward = noise_model.compute_reward(
+                            success=bool(info.get("success", False)),
+                            delta=delta,
+                            mask=mask
+                        )
+
+                    else: # Keep old logic for other models
+                        img_flat = img.flatten().astype(np.float32) / 255.0
+                        delta = noise_model.sample(state=state_vec, action=action, image=img_flat)
+                        delta_np = delta.numpy() if hasattr(delta, "numpy") else delta
+                        mask_np = (np.abs(delta_np) > 1e-6).astype(int)
+                        disturbed_action = np.clip(np.array(action) + delta_np, -1.0, 1.0)
+                        obs, reward, done, info = env.step(disturbed_action.tolist())
+                        
+                        # NOTE: The old compute_reward call might need adjustment if the base class signature changed.
+                        # Assuming it only took delta for dummy models.
+                        adv_reward = noise_model.compute_reward(
+                            success=bool(info.get("success", False)),
+                            delta=torch.tensor(delta)
+                        )
 
                     # Write data step
                     if is_collecting:
@@ -311,19 +363,31 @@ def eval_libero(args: Args):
                         }
                         episode.append(episode_step)
 
-                    if not is_collecting and np.linalg.norm(delta_np) > collect_threshold:
-                        logging.info(f"Collecting data at step {step + 1} with delta {delta_np} and threshold {collect_threshold}")
-                        is_collecting = True
+                    if model_type == "fusion":
+                        # Check if we should start collecting data based on the mask
+                        if not is_collecting and mask_np.sum() > 0:
+                            logging.info(f"Collecting data at step {step + 1} with mask {mask_np}.")
+                            is_collecting = True
+                    else:  # For dummy and history models, check delta norm
+                        collect_threshold = noise_model.collect_threshold
+                        # Check if we should start collecting data based on the delta norm
+                        if not is_collecting and np.linalg.norm(delta_np) > collect_threshold:
+                            logging.info(f"Collecting data at step {step + 1} with delta {delta_np} and threshold {collect_threshold}")
+                            is_collecting = True
 
 
                     # Write noise model step
                     noise_step = {
                         "state": state_vec,
                         "action": action,
-                        "image": img_flat,
+                        "image": img,  # Save the uint8 HWC image, it's more standard
                         "delta": delta_np,
-                        "reward": adv_reward,
-                        "success": done,
+                        "mask": mask_np,  # Add mask
+                        "log_prob": log_prob.item() if model_type == "fusion" else 0.0, # Add log_prob
+                        "reward": adv_reward.item(), # Use .item() to get scalar value
+                        "success": info.get("success", False),  # Add success flag
+                        "language_instruction": str(task_description),
+                        "done": done,
                     }
                     noise_episode.append(noise_step)
 

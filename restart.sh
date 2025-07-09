@@ -40,3 +40,8 @@ uv pip sync examples/libero/requirements.txt third_party/libero/requirements.txt
 uv pip install -e packages/openpi-client
 uv pip install -e third_party/libero
 sudo apt-get install libegl-dev -y
+
+# use the CLIP model
+uv pip install transformers
+uv pip upgrade transformers, tokenizers
+uv pip install numpy==1.24.3 numba==0.57.1

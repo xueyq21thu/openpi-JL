@@ -1,5 +1,5 @@
 {
-"model": "dummy",
+"model": "fusion",
     "dummy": {
         "min_amplitude": 0.1,
         "max_amplitude": 0.2,
@@ -36,5 +36,19 @@
         "beta": 1.0,
         "checkpoints": "/workspace/openpi-JL/checkpoints/noise/pretraining/noise_model_100.pth",
         "threshold": 0.5
+    },
+    "fusion": {
+        "state_dim": 8,
+        "action_dim": 7,
+        "clip_model_name": "openai/clip-vit-base-patch32",
+        "gru_hidden_dim": 256,
+        "n_heads": 4,
+        "reward_k": 1.0,
+        "reward_alpha": 0.1,
+        "reward_beta": 0.05,
+        "noise_std": 0.1,
+        "clip_model_path": "/workspace/openpi-JL/checkpoints/clip_model_local",
+        "episode_length": 360,
+        "collect_threshold": 0.08
     }
 }
