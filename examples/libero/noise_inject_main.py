@@ -89,9 +89,9 @@ class Args:
     
     noise_out_path: str = "data/libero/noise"  # Path to save noise data
 
-    seed: int = 7  # Random Seed (for reproducibility)
+    seed: int = 10  # Random Seed (for reproducibility)
 
-    save_data: bool = False  # Save data
+    save_data: bool = True  # Save data
 
 
 def quat2axisangle(quat):
@@ -169,7 +169,7 @@ def eval_libero(args: Args):
     data_path = pathlib.Path(args.data_out_path) / f"{args.task_suite_name}_no_noops"
     data_path.mkdir(parents=True, exist_ok=True)
 
-    noise_out_path = pathlib.Path(args.noise_out_path) / f"{args.task_suite_name}_no_noops"
+    noise_out_path = pathlib.Path(args.noise_out_path)
     noise_out_path.mkdir(parents=True, exist_ok=True)
 
     total_episodes, total_successes = 0, 0

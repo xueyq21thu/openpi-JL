@@ -30,6 +30,8 @@ from transformers import CLIPProcessor, CLIPModel
 # and contains the 'NoiseModel' abstract base class.
 from noise_model import NoiseModel
 
+from torch.distributions import Bernoulli, Distribution
+
 
 class FusionNoiseModel(NoiseModel, nn.Module):
     """
@@ -136,6 +138,24 @@ class FusionNoiseModel(NoiseModel, nn.Module):
         
         return mask_logit, next_hidden_state
 
+    def get_distribution(
+        self,
+        state_action_history: torch.Tensor,
+        text_instruction: List[str],
+        image: torch.Tensor,
+        hidden_state: Optional[torch.Tensor] = None
+    ) -> Tuple[Distribution, torch.Tensor]:
+        """
+        Computes the policy distribution for the given state.
+        This is essential for TRPO to compute KL divergence.
+        """
+        mask_logit, next_hidden_state = self.forward(
+            state_action_history, text_instruction, image, hidden_state
+        )
+        # Our action space is binary (inject or not), so a Bernoulli distribution is perfect.
+        dist = Bernoulli(logits=mask_logit)
+        return dist, next_hidden_state
+
     # ==========================================================================
     # --- Implementation of Abstract Methods from NoiseModel ---
     # ==========================================================================
@@ -218,7 +238,7 @@ if __name__ == "__main__":
     print("--- 1. Initializing Model and Configuration ---")
     
     config = {
-        "state_dim": 7,
+        "state_dim": 8,
         "action_dim": 7,
         "clip_model_name": "openai/clip-vit-base-patch32",
         "gru_hidden_dim": 256,

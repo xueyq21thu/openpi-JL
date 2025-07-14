@@ -43,5 +43,5 @@ sudo apt-get install libegl-dev -y
 
 # use the CLIP model
 uv pip install transformers
-uv pip upgrade transformers, tokenizers
+uv pip install --upgrade transformers tokenizers
 uv pip install numpy==1.24.3 numba==0.57.1

@@ -1,9 +1,13 @@
-# train_critic_offline.py
+# critic_training.py
 
-import os
+# Append the src directory to the path to find the 'noise' module
+import sys
+sys.path.append("./src")
+
 from pathlib import Path
 from typing import Dict, Any, List
 
+import cv2
 import torch
 import torch.nn as nn
 import torch.optim as optim
@@ -12,9 +16,8 @@ from tqdm import tqdm
 import numpy as np
 import wandb
 
-# 导入您的Critic网络和奖励计算工具
-from valuenet import ValueNetwork, compute_reward
-from data_utils import collate_multimodal_batch
+from noise.model.valuenet import ValueNetwork, compute_reward
+from noise.utils.utils import collate_multimodal_batch
 
 # ==============================================================================
 # SECTION 1: DATASET HANDLING FOR REAL ROLLOUT DATA
@@ -90,7 +93,10 @@ class TrajectoryDataset(Dataset):
                     state_action_hist = np.vstack([padding, state_action_hist])
 
                 # The 'image' in your rollout is already flattened and normalized
-                current_image = episode_data[t]['image']
+                current_image = episode_data[t]['image'] # (224, 224, 3) for a single image
+                # reshape to (3, 256, 256) if needed
+                if current_image.shape != (256, 256, 3):
+                    current_image = cv2.resize(current_image, (256, 256))
 
                 all_data_points.append({
                     "context": {
@@ -167,6 +173,17 @@ def train_critic_from_rollouts(config: Dict[str, Any]):
     
     # --- 3. Initialize Model and Optimizer ---
     critic_model = ValueNetwork(config).to(device)
+
+    checkpoint_path = config.get("save_dir", None)
+    # check if a pre-trained model exists
+    if checkpoint_path:
+        checkpoint_path = Path(checkpoint_path) / "critic_best.pth"
+        if checkpoint_path.exists():
+            print(f"Loading pre-trained model from {checkpoint_path}")
+            critic_model.load_state_dict(torch.load(checkpoint_path, map_location=device))
+        else:
+            print(f"No pre-trained model found at {checkpoint_path}, starting from scratch.")
+
     optimizer = optim.AdamW(critic_model.parameters(), lr=config.get("lr", 1e-4), weight_decay=1e-3)
     loss_fn = nn.MSELoss()
 
@@ -251,10 +268,10 @@ if __name__ == '__main__':
     # --- Central Configuration ---
     CONFIG = {
         # Data source path from your rollout script
-        "data_source_path": "data/libero/noise/libero_spatial_no_noops",
+        "data_source_path": "data/libero/noise",
 
         # Model Configuration (must match the model used during rollout)
-        'state_dim': 14, # Example from LIBERO: 7 for eef_pos+quat_axis_angle, 7 for gripper
+        'state_dim': 8, # Example from LIBERO: 7 for eef_pos+quat_axis_angle, 7 for gripper
         'action_dim': 7, # 6 for eef, 1 for gripper
         'gru_hidden_dim': 256,
         'n_heads': 8,
@@ -266,7 +283,7 @@ if __name__ == '__main__':
         
         # Training Hyperparameters
         "lr": 3e-4,
-        "epochs": 30,
+        "epochs": 500,
         "batch_size": 128,
         "gamma": 0.99, # Discount factor for calculating returns
         "val_split_ratio": 0.15,
