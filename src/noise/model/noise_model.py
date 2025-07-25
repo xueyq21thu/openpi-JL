@@ -17,13 +17,14 @@ class NoiseModel(ABC):
         self.config = config if config is not None else {}
     
     @abstractmethod
-    def sample(self, state, action=None, image=None):
+    def sample(self, state, action=None, image=None, text_instruction=None):
         """
         Sample noise based on the current state and action.
         Args:
             state: Current state of the environment.
             action: Current action to be modified with noise.
             image: Optional image input (if applicable).
+            text_instruction: Optional text instruction input (if applicable).
         Return:
             Delta: noise with randomized amplitude and direction.
         """

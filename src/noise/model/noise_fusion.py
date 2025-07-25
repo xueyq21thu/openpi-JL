@@ -22,6 +22,7 @@
 from typing import List, Dict, Any, Tuple, Optional
 
 import torch
+import itertools
 import torch.nn as nn
 from torch.distributions import Bernoulli
 from transformers import CLIPProcessor, CLIPModel
@@ -103,6 +104,18 @@ class FusionNoiseModel(NoiseModel, nn.Module):
 
         # configure
         self.episode_length = self.config.get('episode_length', 360)
+
+    def trainable_parameters(self):
+        """
+        Returns an iterator over the model's trainable parameters,
+        explicitly excluding the frozen CLIP model.
+        """
+        return itertools.chain(
+            self.state_action_encoder.parameters(),
+            self.state_action_projector.parameters(),
+            self.cross_attention.parameters(),
+            self.mask_head.parameters()
+        )
 
     # ==========================================================================
     # --- Core Forward Pass ---

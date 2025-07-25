@@ -7,6 +7,9 @@ from torch.utils.data import Dataset, DataLoader
 from torchvision import transforms
 from glob import glob
 
+from typing import Dict, Any, List
+from pathlib import Path
+
 
 """
 This script implements a dataset class for training noise models.
@@ -211,6 +214,100 @@ class StepNoiseDataset(Dataset):
             "image": image,
             "success": torch.tensor(success, dtype=torch.float32)
         }
+
+
+class TrajectoryDataset(Dataset):
+    """
+    A PyTorch Dataset for loading trajectory data.
+    
+    This version is finalized to provide all necessary data fields for both
+    offline Critic training (discounted returns) and offline Actor training (rewards,
+    dones, masks, old log_probs for GAE and policy gradient calculations).
+    """
+
+    def __init__(self, trajectory_files: List[Path], config: Dict[str, Any], history_len: int = 10):
+        self.config = config
+        self.history_len = history_len
+        self.data_points = self._process_trajectories(trajectory_files)
+
+    def _process_trajectories(self, trajectory_files: List[Path]) -> List[Dict[str, Any]]:
+        all_data_points = []
+        print(f"Loading and processing {len(trajectory_files)} trajectories...")
+
+        for file_path in tqdm(trajectory_files, desc="Processing Trajectories"):
+            # ... (file loading logic is unchanged) ...
+            try:
+                episode_data = np.load(file_path, allow_pickle=True)
+            except Exception as e:
+                print(f"Error loading {file_path}: {e}")
+                continue
+
+            # --- DATA PREPARATION ---
+            rewards = [step['reward'] for step in episode_data]
+            # Pre-calculate discounted returns, which are the targets for the Critic
+            returns_for_critic = self._compute_discounted_returns(rewards, self.config.get('gamma', 0.99))
+
+            # --- UNROLL TRAJECTORY ---
+            for t in range(len(episode_data)):
+                current_step = episode_data[t]
+                
+                # --- State-Action History ---
+                start_idx = max(0, t - self.history_len + 1)
+                history_steps = episode_data[start_idx : t + 1]
+                states = np.array([step['state'] for step in history_steps], dtype=np.float32)
+                actions = np.array([step['action'] for step in history_steps], dtype=np.float32)
+                state_action_hist = np.concatenate([states, actions], axis=-1)
+                
+                if len(state_action_hist) < self.history_len:
+                    padding_needed = self.history_len - len(state_action_hist)
+                    padding = np.zeros((padding_needed, state_action_hist.shape[1]), dtype=np.float32)
+                    state_action_hist = np.vstack([padding, state_action_hist])
+
+                # --- Image Processing ---
+                current_image_np = current_step['image'] # Assuming (H, W, C) uint8
+                if current_image_np.shape != (256, 256, 3):
+                    current_image_np = cv2.resize(current_image_np, (256, 256))
+                
+                # Convert to (C, H, W) tensor and normalize
+                image_tensor = torch.from_numpy(current_image_np).float().permute(2, 0, 1) / 255.0
+
+                # --- FINAL DATA POINT DICTIONARY ---
+                # This dictionary now contains EVERYTHING needed for training.
+                all_data_points.append({
+                    "context": {
+                        "state_action_history": torch.from_numpy(state_action_hist).float(),
+                        "image": image_tensor,
+                        "text": current_step.get('language_instruction', "Default Task Instruction")
+                    },
+                    # Target for the Critic
+                    "return_for_critic": returns_for_critic[t],
+                    
+                    # Data needed for Actor's GAE calculation and update
+                    "reward": torch.tensor(current_step.get('reward', 0.0), dtype=torch.float32),
+                    "done": torch.tensor(current_step.get('done', False), dtype=torch.float32),
+                    "mask_action": torch.tensor(current_step.get('mask', 0.0), dtype=torch.float32),
+                    "old_log_prob": torch.tensor(current_step.get('log_prob', 0.0), dtype=torch.float32)
+                })
+        
+        print(f"Successfully processed {len(all_data_points)} data points.")
+        return all_data_points
+    
+    # ... (__compute_discounted_returns, __len__, __getitem__ are unchanged) ...
+    @staticmethod
+    def _compute_discounted_returns(rewards: List[float], gamma: float) -> torch.Tensor:
+        returns = []
+        future_return = 0.0
+        for r in reversed(rewards):
+            future_return = r + gamma * future_return
+            returns.append(future_return)
+        return torch.tensor(list(reversed(returns)), dtype=torch.float32)
+
+    def __len__(self) -> int:
+        return len(self.data_points)
+
+    def __getitem__(self, idx: int) -> Dict[str, Any]:
+        return self.data_points[idx]
+    
 
 # Example usage
 if __name__ == "__main__":

@@ -26,8 +26,12 @@ import json
 with open("./configs/noise_model_config.json", "r") as f:
     config = json.load(f)
 
-# Choose model type: 'dummy' or 'history' or 'vision'
+
 model_type = config.get("model", "dummy")
+
+# Determine the device to run the model on
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
 if model_type == "dummy":
     from noise.model.noise_dummy import DummyNoiseModel
     noise_model = DummyNoiseModel(config["dummy"])
@@ -37,17 +41,34 @@ elif model_type == "history":
 elif model_type == "vision":
     from noise.model.noise_vision import VisionNoiseModel
     noise_model = VisionNoiseModel(config["vision"])
-    # load checkpoint if available
-    if config["vision"].get("checkpoints", None) is not None:
-        chkp = torch.load(config["vision"]["checkpoints"], map_location="cpu")
-        print(f"Loading noise model checkpoint from {config['vision']['checkpoints']}...")
-        noise_model.load_state_dict(chkp, strict=False)
+    # This part already has checkpoint loading logic, which is good.
+    # We will replicate this for the fusion model.
+    if config["vision"].get("checkpoints"):
+        chkp_path = config["vision"]["checkpoints"]
+        print(f"Loading VisionNoiseModel checkpoint from {chkp_path}...")
+        noise_model.load_state_dict(torch.load(chkp_path, map_location="cpu"))
         print("Checkpoint loaded successfully.")
+
 elif model_type == "fusion":
     from noise.model.noise_fusion import FusionNoiseModel
-    noise_model = FusionNoiseModel(config["fusion"])
+    # Instantiate the model and immediately move it to the correct device
+    noise_model = FusionNoiseModel(config["fusion"]).to(device)
+    print(f"FusionNoiseModel instantiated on device: {device}")
+
+    # Check for the actor_checkpoint_path in the config
+    actor_checkpoint_path = config["fusion"].get("actor_checkpoint_path")
+    if actor_checkpoint_path and pathlib.Path(actor_checkpoint_path).exists():
+        print(f"Loading actor checkpoint from: {actor_checkpoint_path}")
+        # Load the state dict, ensuring it's mapped to the correct device
+        state_dict = torch.load(actor_checkpoint_path, map_location=device)
+        noise_model.load_state_dict(state_dict)
+        print("✅ Actor checkpoint loaded successfully.")
+    else:
+        print("⚠️ No actor checkpoint found or specified. Using a randomly initialized model.")
+
 else:
     raise ValueError(f"Unsupported noise model type: {model_type}")
+
 
 LIBERO_DUMMY_ACTION = [0.0] * 6 + [-1.0]
 LIBERO_ENV_RESOLUTION = 256  # resolution used to render training data
@@ -299,10 +320,10 @@ def eval_libero(args: Args):
 
                     if model_type == "fusion":
                         # 1. Prepare Tensors for the model
-                        state_tensor = torch.from_numpy(state_vec).float().unsqueeze(0).to(noise_model.device)
-                        action_tensor = torch.from_numpy(action.copy()).float().unsqueeze(0).to(noise_model.device)
+                        state_tensor = torch.from_numpy(state_vec).float().unsqueeze(0).to(device)
+                        action_tensor = torch.from_numpy(action.copy()).float().unsqueeze(0).to(device)
                         image_tensor = torch.from_numpy(img).float().permute(2, 0, 1) / 255.0
-                        image_tensor = image_tensor.unsqueeze(0).to(noise_model.device)
+                        image_tensor = image_tensor.unsqueeze(0).to(device)
                         
                         # 2. Call the model's sample method
                         delta, mask, log_prob = noise_model.sample(

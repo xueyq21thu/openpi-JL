@@ -1,17 +1,23 @@
+# download_clip.py
 from transformers import CLIPProcessor, CLIPModel
+import os
 
-# model name: # https://huggingface.co/openai/clip-vit-base-patch32
 model_name = "openai/clip-vit-base-patch32"
-
-save_directory = "./checkpoints/clip_model_local" 
+save_directory = "./checkpoints/clip_model_local"
+os.makedirs(save_directory, exist_ok=True)
 
 print(f"Downloading model '{model_name}' to '{save_directory}'...")
 
-# 下载并保存 Processor 和 Model 的所有文件
+# Processor 的下载通常不受影响
 processor = CLIPProcessor.from_pretrained(model_name)
 processor.save_pretrained(save_directory)
 
-model = CLIPModel.from_pretrained(model_name)
+# --- THIS IS THE FIX ---
+# Add use_safetensors=True to prioritize the secure format
+# and bypass the torch version check.
+model = CLIPModel.from_pretrained(model_name, use_safetensors=True)
+# --- END OF FIX ---
+
 model.save_pretrained(save_directory)
 
-print("✅ Download complete.")
+print(f"✅ Download complete. The folder '{save_directory}' is ready.")

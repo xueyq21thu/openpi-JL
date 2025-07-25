@@ -40,15 +40,16 @@
     "fusion": {
         "state_dim": 8,
         "action_dim": 7,
-        "clip_model_name": "openai/clip-vit-base-patch32",
         "gru_hidden_dim": 256,
-        "n_heads": 4,
+        "n_heads": 8,
+        "clip_model_path": "checkpoints/clip_model_local",
+
+        "actor_checkpoint_path": "checkpoints/actor_critic_offline/actor_best.pth",
+
         "reward_k": 1.0,
         "reward_alpha": 0.1,
         "reward_beta": 0.05,
         "noise_std": 0.1,
-        "clip_model_path": "/workspace/openpi-JL/checkpoints/clip_model_local",
-        "episode_length": 360,
-        "collect_threshold": 0.08
+        "episode_length": 360
     }
 }
